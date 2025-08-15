@@ -406,7 +406,17 @@ class MatriculaController extends Controller
             
             // Adicionar valores padrão para campos obrigatórios no banco
             $dadosMatricula['valor_matricula'] = $dadosMatricula['valor_matricula'] ?? 0;
-            $dadosMatricula['valor_mensalidade'] = $dadosMatricula['valor_mensalidade'] ?? 0;
+            
+            // Calcular valor_mensalidade se não foi informado e for parcelado
+            if ((!isset($dadosMatricula['valor_mensalidade']) || $dadosMatricula['valor_mensalidade'] == 0) && 
+                isset($dadosMatricula['numero_parcelas']) && $dadosMatricula['numero_parcelas'] > 1 &&
+                isset($dadosMatricula['valor_total_curso']) && $dadosMatricula['valor_total_curso'] > 0) {
+                
+                $valorParaParcelar = $dadosMatricula['valor_total_curso'] - $dadosMatricula['valor_matricula'];
+                $dadosMatricula['valor_mensalidade'] = $valorParaParcelar / $dadosMatricula['numero_parcelas'];
+            } else {
+                $dadosMatricula['valor_mensalidade'] = $dadosMatricula['valor_mensalidade'] ?? 0;
+            }
             
             // Adicionar dados do usuário logado
             $dadosMatricula['created_by'] = Auth::id();
@@ -740,6 +750,20 @@ class MatriculaController extends Controller
                     'success' => false,
                     'message' => 'Matrícula não possui dados de pagamento válidos para regenerar.'
                 ], 400);
+            }
+
+            // Corrigir valor_mensalidade se necessário
+            if ((!$matricula->valor_mensalidade || $matricula->valor_mensalidade == 0) && 
+                $matricula->numero_parcelas > 1 && $matricula->valor_total_curso > 0) {
+                
+                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                $matricula->valor_mensalidade = $valorParaParcelar / $matricula->numero_parcelas;
+                $matricula->save();
+                
+                Log::info('Valor da mensalidade corrigido durante regeneração', [
+                    'matricula_id' => $matricula->id,
+                    'novo_valor_mensalidade' => $matricula->valor_mensalidade
+                ]);
             }
 
             DB::beginTransaction();
@@ -1099,6 +1123,8 @@ class MatriculaController extends Controller
         }
     }
 
+
+
     /**
      * Criar pagamentos parcelados
      */
@@ -1119,7 +1145,7 @@ class MatriculaController extends Controller
                 'forma_pagamento' => $matricula->forma_pagamento, // Usar dados da matrícula
                 'data_vencimento' => $dataVencimentoMatricula,
                 'descricao' => 'Matrícula - ' . ($matricula->inscricao->curso->nome ?? 'Curso'),
-                'numero_parcela' => 1,
+                'numero_parcela' => 0, // Matrícula usa número 0 para diferenciá-la das mensalidades
                 'total_parcelas' => $matricula->numero_parcelas + 1, // Usar dados da matrícula
                 'status' => 'pending',
             ]);
@@ -1167,8 +1193,8 @@ class MatriculaController extends Controller
         $matricula->parcelas_ativas = true;
         $matricula->saveQuietly(); // Evita disparar hooks updating/updated
 
-        // Criar apenas a primeira mensalidade se não houver valor de matrícula
-        if ($matricula->valor_matricula == 0 && $matricula->numero_parcelas > 0) {
+        // Criar mensalidades se houver parcelamento configurado
+        if ($matricula->numero_parcelas > 0) {
             // Para boleto parcelado, criar TODAS as parcelas automaticamente
             if ($matricula->tipo_boleto === 'parcelado') {
                 for ($i = 1; $i <= $matricula->numero_parcelas; $i++) {
@@ -1188,9 +1214,17 @@ class MatriculaController extends Controller
                     
                     $dataVencimento = now()->addMonths($i)->day((int) $matricula->dia_vencimento);
                     
+                    // Calcular valor da mensalidade
+                    $valorMensalidade = $matricula->valor_mensalidade;
+                    if (!$valorMensalidade || $valorMensalidade == 0) {
+                        // Se valor_mensalidade for 0, calcular baseado no valor total menos matrícula
+                        $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                        $valorMensalidade = $valorParaParcelar / $matricula->numero_parcelas;
+                    }
+                    
                     $paymentMensalidade = Payment::create([
                         'matricula_id' => $matricula->id,
-                        'valor' => $matricula->valor_mensalidade,
+                        'valor' => $valorMensalidade,
                         'forma_pagamento' => $matricula->forma_pagamento,
                         'data_vencimento' => $dataVencimento,
                         'descricao' => 'Mensalidade ' . $i . '/' . $matricula->numero_parcelas . ' - ' . ($matricula->inscricao->curso->nome ?? 'Curso'),

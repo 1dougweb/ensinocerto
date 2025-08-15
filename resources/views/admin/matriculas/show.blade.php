@@ -295,10 +295,18 @@
                             <i class="fas fa-credit-card me-2"></i>
                             Pagamentos
                         </h5>
-                        <a href="{{ route('admin.payments.create', ['matricula_id' => $matricula->id]) }}" class="btn btn-success btn-sm">
-                            <i class="fas fa-plus me-1"></i>
-                            Novo Pagamento
-                        </a>
+                        <div class="btn-group">
+                            <a href="{{ route('admin.payments.create', ['matricula_id' => $matricula->id]) }}" class="btn btn-success btn-sm">
+                                <i class="fas fa-plus me-1"></i>
+                                Novo Pagamento
+                            </a>
+                            @if($matricula->numero_parcelas > 1 && $matricula->tipo_boleto === 'parcelado')
+                                <button type="button" class="btn btn-warning btn-sm" onclick="regeneratePayments({{ $matricula->id }})">
+                                    <i class="fas fa-sync me-1"></i>
+                                    Regenerar Parcelas
+                                </button>
+                            @endif
+                        </div>
                     </div>
                 </div>
                 <div class="card-body">
@@ -316,6 +324,87 @@
                                     </tr>
                                 </thead>
                                 <tbody>
+                                    {{-- Mostrar primeiro o pagamento da matrícula se houver valor --}}
+                                    @if($matricula->valor_matricula > 0)
+                                        @php
+                                            $paymentMatricula = $matricula->payments->where('numero_parcela', 0)->first();
+                                            if (!$paymentMatricula) {
+                                                $paymentMatricula = $matricula->payments->filter(function($payment) {
+                                                    return str_contains(strtolower($payment->descricao), 'matrícula');
+                                                })->first();
+                                            }
+                                            $dueDate = null;
+                                            if ($matricula->dia_vencimento) {
+                                                $dueDate = \Carbon\Carbon::now()->addDays(7); // Matrícula vence em 7 dias por padrão
+                                            }
+                                        @endphp
+                                        <tr class="{{ $paymentMatricula ? ($paymentMatricula->status === 'paid' ? 'table-success' : 'table-warning') : 'table-light' }}">
+                                            <td>
+                                                <span class="badge bg-{{ $paymentMatricula ? ($paymentMatricula->status === 'paid' ? 'success' : 'info') : 'info' }}">
+                                                    <i class="fas fa-graduation-cap me-1"></i>
+                                                    Matrícula
+                                                </span>
+                                            </td>
+                                            <td class="fw-bold">
+                                                R$ {{ number_format($matricula->valor_matricula, 2, ',', '.') }}
+                                            </td>
+                                            <td>
+                                                @if($paymentMatricula)
+                                                    {{ $paymentMatricula->getFormattedDueDate() }}
+                                                    @if($paymentMatricula->isOverdue())
+                                                        <small class="text-danger d-block">
+                                                            <i class="fas fa-exclamation-triangle"></i>
+                                                            {{ $paymentMatricula->getFormattedDaysOverdue() }} em atraso
+                                                        </small>
+                                                    @elseif($paymentMatricula->isDueSoon())
+                                                        <small class="text-warning d-block">
+                                                            <i class="fas fa-clock"></i>
+                                                            Vence em {{ $paymentMatricula->getDaysUntilDue() }} dias
+                                                        </small>
+                                                    @endif
+                                                @else
+                                                    <span class="text-muted">Aguardando geração</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($paymentMatricula)
+                                                    <span class="badge bg-{{ $paymentMatricula->getStatusColor() }}">
+                                                        {{ $paymentMatricula->getStatusLabel() }}
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-secondary">Pendente</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($paymentMatricula && $paymentMatricula->isPaid())
+                                                    <small class="text-success">
+                                                        <i class="fas fa-check"></i>
+                                                        {{ $paymentMatricula->getFormattedPaidDate() }}
+                                                    </small>
+                                                @else
+                                                    -
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($paymentMatricula)
+                                                    <div class="btn-group btn-group-sm">
+                                                        <a href="{{ route('admin.payments.show', $paymentMatricula) }}" class="btn btn-outline-primary btn-sm" title="Ver Detalhes">
+                                                            <i class="fas fa-eye"></i>
+                                                        </a>
+                                                        @if(!$paymentMatricula->isPaid())
+                                                            <a href="{{ route('admin.payments.edit', $paymentMatricula) }}" class="btn btn-outline-warning btn-sm" title="Editar">
+                                                                <i class="fas fa-edit"></i>
+                                                            </a>
+                                                        @endif
+                                                    </div>
+                                                @else
+                                                    <span class="text-muted">-</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endif
+
+                                    {{-- Mostrar mensalidades se for parcelado --}}
                                     @if($matricula->tipo_boleto === 'parcelado' && $matricula->numero_parcelas > 1)
                                         @for($i = 1; $i <= $matricula->numero_parcelas; $i++)
                                             @php
@@ -334,29 +423,10 @@
                                                     @php
                                                         $gateway = $matricula->payment_gateway ?? 'mercado_pago';
                                                     @endphp
-                                                    @if($gateway === 'mercado_pago')
-                                                        {{-- Lógica original para Mercado Pago --}}
-                                                        @if($matricula->forma_pagamento === 'boleto' && $matricula->numero_parcelas > 1)
-                                                            <span class="badge bg-{{ $payment ? ($payment->status === 'paid' ? 'success' : 'warning') : 'secondary' }}">
-                                                                Parcela {{ $i }}
-                                                            </span>
-                                                        @else
-                                                            <span class="badge bg-primary">
-                                                                À Vista
-                                                            </span>
-                                                        @endif
-                                                    @else
-                                                        {{-- Lógica para outros bancos --}}
-                                                        @if($matricula->numero_parcelas > 1)
-                                                            <span class="badge bg-{{ $payment ? ($payment->status === 'paid' ? 'success' : 'warning') : 'secondary' }}">
-                                                                Parcela {{ $i }}
-                                                            </span>
-                                                        @else
-                                                            <span class="badge bg-primary">
-                                                                À Vista/Manual
-                                                            </span>
-                                                        @endif
-                                                    @endif
+                                                    <span class="badge bg-{{ $payment ? ($payment->status === 'paid' ? 'success' : 'warning') : 'secondary' }}">
+                                                        <i class="fas fa-calendar me-1"></i>
+                                                        Mensalidade {{ $i }}
+                                                    </span>
                                                 </td>
                                                 <td class="fw-bold">
                                                     @php
@@ -367,8 +437,11 @@
                                                         {{-- Mercado Pago: usar valor_mensalidade ou calcular --}}
                                                         @php
                                                             $valorMP = $matricula->valor_mensalidade;
-                                                            if (!$valorMP && $matricula->numero_parcelas > 0) {
-                                                                $valorMP = $matricula->valor_total_curso / $matricula->numero_parcelas;
+                                                            // Se valor_mensalidade for 0 ou nulo, calcular baseado no valor total
+                                                            if ((!$valorMP || $valorMP == 0) && $matricula->numero_parcelas > 0 && $matricula->valor_total_curso > 0) {
+                                                                // Para parcelado, descontar o valor da matrícula e dividir pelas parcelas
+                                                                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                                $valorMP = $valorParaParcelar / $matricula->numero_parcelas;
                                                             }
                                                             $valorMP = $valorMP ?? 0;
                                                         @endphp
@@ -380,7 +453,12 @@
                                                         @elseif($matricula->valor_pago)
                                                             R$ {{ number_format($matricula->valor_pago, 2, ',', '.') }}
                                                         @elseif($matricula->numero_parcelas > 1)
-                                                            R$ {{ number_format($matricula->valor_total_curso / $matricula->numero_parcelas, 2, ',', '.') }}
+                                                            @php
+                                                                // Para parcelado, descontar o valor da matrícula e dividir pelas parcelas
+                                                                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                                $valorParcela = $valorParaParcelar / $matricula->numero_parcelas;
+                                                            @endphp
+                                                            R$ {{ number_format($valorParcela, 2, ',', '.') }}
                                                         @else
                                                             R$ {{ number_format($matricula->valor_total_curso, 2, ',', '.') }}
                                                         @endif
@@ -544,13 +622,26 @@
                                                         @elseif($matricula->valor_pago)
                                                             R$ {{ number_format($matricula->valor_pago, 2, ',', '.') }}
                                                         @elseif($matricula->numero_parcelas > 1)
-                                                            R$ {{ number_format($matricula->valor_total_curso / $matricula->numero_parcelas, 2, ',', '.') }}
+                                                            @php
+                                                                // Para parcelado, descontar o valor da matrícula e dividir pelas parcelas
+                                                                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                                $valorParcela = $valorParaParcelar / $matricula->numero_parcelas;
+                                                            @endphp
+                                                            R$ {{ number_format($valorParcela, 2, ',', '.') }}
                                                         @else
                                                             R$ {{ number_format($matricula->valor_total_curso, 2, ',', '.') }}
                                                         @endif
                                                     @else
-                                                        {{-- Para Mercado Pago, usar valor do payment --}}
-                                                        {{ $payment->getFormattedAmount() }}
+                                                        {{-- Para Mercado Pago, usar valor do payment ou calcular se zerado --}}
+                                                        @php
+                                                            $valorPayment = $payment->valor;
+                                                            // Se valor do payment for 0, calcular baseado na matrícula
+                                                            if (!$valorPayment || $valorPayment == 0) {
+                                                                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                                $valorPayment = $valorParaParcelar / $matricula->numero_parcelas;
+                                                            }
+                                                        @endphp
+                                                        R$ {{ number_format($valorPayment, 2, ',', '.') }}
                                                     @endif
                                                 </td>
                                                 <td>
@@ -1162,4 +1253,51 @@
     </div>
 </div>
 @endpush
+
+@push('scripts')
+<script>
+function regeneratePayments(matriculaId) {
+    if (!confirm('Isso irá recriar todas as parcelas pendentes. Os valores de mensalidade serão recalculados automaticamente. Deseja continuar?')) {
+        return;
+    }
+    
+    // Mostrar loading
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Regenerando...';
+    btn.disabled = true;
+    
+    fetch(`{{ url('dashboard/matriculas') }}/${matriculaId}/regenerate-payments`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Parcelas regeneradas com sucesso!');
+            if (data.redirect_url) {
+                window.location.href = data.redirect_url;
+            } else {
+                window.location.reload();
+            }
+        } else {
+            alert('Erro: ' + data.message);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao regenerar parcelas. Verifique o console para mais detalhes.');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+</script>
+@endpush
+
 @endsection 

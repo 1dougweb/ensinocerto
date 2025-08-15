@@ -314,10 +314,18 @@
                             <i class="fas fa-credit-card me-2"></i>
                             Pagamentos
                         </h5>
-                        <a href="<?php echo e(route('admin.payments.create', ['matricula_id' => $matricula->id])); ?>" class="btn btn-success btn-sm">
-                            <i class="fas fa-plus me-1"></i>
-                            Novo Pagamento
-                        </a>
+                        <div class="btn-group">
+                            <a href="<?php echo e(route('admin.payments.create', ['matricula_id' => $matricula->id])); ?>" class="btn btn-success btn-sm">
+                                <i class="fas fa-plus me-1"></i>
+                                Novo Pagamento
+                            </a>
+                            <?php if($matricula->numero_parcelas > 1 && $matricula->tipo_boleto === 'parcelado'): ?>
+                                <button type="button" class="btn btn-warning btn-sm" onclick="regeneratePayments(<?php echo e($matricula->id); ?>)">
+                                    <i class="fas fa-sync me-1"></i>
+                                    Regenerar Parcelas
+                                </button>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
                 <div class="card-body">
@@ -335,13 +343,98 @@
                                     </tr>
                                 </thead>
                                 <tbody>
+                                    
+                                    <?php if($matricula->valor_matricula > 0): ?>
+                                        <?php
+                                            $paymentMatricula = $matricula->payments->where('numero_parcela', 0)->first();
+                                            if (!$paymentMatricula) {
+                                                $paymentMatricula = $matricula->payments->filter(function($payment) {
+                                                    return str_contains(strtolower($payment->descricao), 'matrícula');
+                                                })->first();
+                                            }
+                                            $dueDate = null;
+                                            if ($matricula->dia_vencimento) {
+                                                $dueDate = \Carbon\Carbon::now()->addDays(7); // Matrícula vence em 7 dias por padrão
+                                            }
+                                        ?>
+                                        <tr class="<?php echo e($paymentMatricula ? ($paymentMatricula->status === 'paid' ? 'table-success' : 'table-warning') : 'table-light'); ?>">
+                                            <td>
+                                                <span class="badge bg-<?php echo e($paymentMatricula ? ($paymentMatricula->status === 'paid' ? 'success' : 'info') : 'info'); ?>">
+                                                    <i class="fas fa-graduation-cap me-1"></i>
+                                                    Matrícula
+                                                </span>
+                                            </td>
+                                            <td class="fw-bold">
+                                                R$ <?php echo e(number_format($matricula->valor_matricula, 2, ',', '.')); ?>
+
+                                            </td>
+                                            <td>
+                                                <?php if($paymentMatricula): ?>
+                                                    <?php echo e($paymentMatricula->getFormattedDueDate()); ?>
+
+                                                    <?php if($paymentMatricula->isOverdue()): ?>
+                                                        <small class="text-danger d-block">
+                                                            <i class="fas fa-exclamation-triangle"></i>
+                                                            <?php echo e($paymentMatricula->getFormattedDaysOverdue()); ?> em atraso
+                                                        </small>
+                                                    <?php elseif($paymentMatricula->isDueSoon()): ?>
+                                                        <small class="text-warning d-block">
+                                                            <i class="fas fa-clock"></i>
+                                                            Vence em <?php echo e($paymentMatricula->getDaysUntilDue()); ?> dias
+                                                        </small>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                    <span class="text-muted">Aguardando geração</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if($paymentMatricula): ?>
+                                                    <span class="badge bg-<?php echo e($paymentMatricula->getStatusColor()); ?>">
+                                                        <?php echo e($paymentMatricula->getStatusLabel()); ?>
+
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">Pendente</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if($paymentMatricula && $paymentMatricula->isPaid()): ?>
+                                                    <small class="text-success">
+                                                        <i class="fas fa-check"></i>
+                                                        <?php echo e($paymentMatricula->getFormattedPaidDate()); ?>
+
+                                                    </small>
+                                                <?php else: ?>
+                                                    -
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if($paymentMatricula): ?>
+                                                    <div class="btn-group btn-group-sm">
+                                                        <a href="<?php echo e(route('admin.payments.show', $paymentMatricula)); ?>" class="btn btn-outline-primary btn-sm" title="Ver Detalhes">
+                                                            <i class="fas fa-eye"></i>
+                                                        </a>
+                                                        <?php if(!$paymentMatricula->isPaid()): ?>
+                                                            <a href="<?php echo e(route('admin.payments.edit', $paymentMatricula)); ?>" class="btn btn-outline-warning btn-sm" title="Editar">
+                                                                <i class="fas fa-edit"></i>
+                                                            </a>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endif; ?>
+
+                                    
                                     <?php if($matricula->tipo_boleto === 'parcelado' && $matricula->numero_parcelas > 1): ?>
                                         <?php for($i = 1; $i <= $matricula->numero_parcelas; $i++): ?>
                                             <?php
                                                 $payment = $matricula->payments->where('numero_parcela', $i)->first();
                                                 $dueDate = null;
                                                 if ($matricula->dia_vencimento) {
-                                                    $dueDate = \Carbon\Carbon::now()->startOfMonth()->addMonths($i - 1)->setDay($matricula->dia_vencimento);
+                                                    $dueDate = \Carbon\Carbon::now()->startOfMonth()->addMonths($i - 1)->setDay((int) $matricula->dia_vencimento);
                                                     // Se a data já passou, vamos para o próximo mês
                                                     if ($dueDate->isPast()) {
                                                         $dueDate = $dueDate->addMonths(1);
@@ -353,31 +446,11 @@
                                                     <?php
                                                         $gateway = $matricula->payment_gateway ?? 'mercado_pago';
                                                     ?>
-                                                    <?php if($gateway === 'mercado_pago'): ?>
-                                                        
-                                                        <?php if($matricula->forma_pagamento === 'boleto' && $matricula->numero_parcelas > 1): ?>
-                                                            <span class="badge bg-<?php echo e($payment ? ($payment->status === 'paid' ? 'success' : 'warning') : 'secondary'); ?>">
-                                                                Parcela <?php echo e($i); ?>
+                                                    <span class="badge bg-<?php echo e($payment ? ($payment->status === 'paid' ? 'success' : 'warning') : 'secondary'); ?>">
+                                                        <i class="fas fa-calendar me-1"></i>
+                                                        Mensalidade <?php echo e($i); ?>
 
-                                                            </span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-primary">
-                                                                À Vista
-                                                            </span>
-                                                        <?php endif; ?>
-                                                    <?php else: ?>
-                                                        
-                                                        <?php if($matricula->numero_parcelas > 1): ?>
-                                                            <span class="badge bg-<?php echo e($payment ? ($payment->status === 'paid' ? 'success' : 'warning') : 'secondary'); ?>">
-                                                                Parcela <?php echo e($i); ?>
-
-                                                            </span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-primary">
-                                                                À Vista/Manual
-                                                            </span>
-                                                        <?php endif; ?>
-                                                    <?php endif; ?>
+                                                    </span>
                                                 </td>
                                                 <td class="fw-bold">
                                                     <?php
@@ -388,8 +461,11 @@
                                                         
                                                         <?php
                                                             $valorMP = $matricula->valor_mensalidade;
-                                                            if (!$valorMP && $matricula->numero_parcelas > 0) {
-                                                                $valorMP = $matricula->valor_total_curso / $matricula->numero_parcelas;
+                                                            // Se valor_mensalidade for 0 ou nulo, calcular baseado no valor total
+                                                            if ((!$valorMP || $valorMP == 0) && $matricula->numero_parcelas > 0 && $matricula->valor_total_curso > 0) {
+                                                                // Para parcelado, descontar o valor da matrícula e dividir pelas parcelas
+                                                                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                                $valorMP = $valorParaParcelar / $matricula->numero_parcelas;
                                                             }
                                                             $valorMP = $valorMP ?? 0;
                                                         ?>
@@ -404,7 +480,12 @@
                                                             R$ <?php echo e(number_format($matricula->valor_pago, 2, ',', '.')); ?>
 
                                                         <?php elseif($matricula->numero_parcelas > 1): ?>
-                                                            R$ <?php echo e(number_format($matricula->valor_total_curso / $matricula->numero_parcelas, 2, ',', '.')); ?>
+                                                            <?php
+                                                                // Para parcelado, descontar o valor da matrícula e dividir pelas parcelas
+                                                                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                                $valorParcela = $valorParaParcelar / $matricula->numero_parcelas;
+                                                            ?>
+                                                            R$ <?php echo e(number_format($valorParcela, 2, ',', '.')); ?>
 
                                                         <?php else: ?>
                                                             R$ <?php echo e(number_format($matricula->valor_total_curso, 2, ',', '.')); ?>
@@ -577,7 +658,12 @@
                                                             R$ <?php echo e(number_format($matricula->valor_pago, 2, ',', '.')); ?>
 
                                                         <?php elseif($matricula->numero_parcelas > 1): ?>
-                                                            R$ <?php echo e(number_format($matricula->valor_total_curso / $matricula->numero_parcelas, 2, ',', '.')); ?>
+                                                            <?php
+                                                                // Para parcelado, descontar o valor da matrícula e dividir pelas parcelas
+                                                                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                                $valorParcela = $valorParaParcelar / $matricula->numero_parcelas;
+                                                            ?>
+                                                            R$ <?php echo e(number_format($valorParcela, 2, ',', '.')); ?>
 
                                                         <?php else: ?>
                                                             R$ <?php echo e(number_format($matricula->valor_total_curso, 2, ',', '.')); ?>
@@ -585,7 +671,15 @@
                                                         <?php endif; ?>
                                                     <?php else: ?>
                                                         
-                                                        <?php echo e($payment->getFormattedAmount()); ?>
+                                                        <?php
+                                                            $valorPayment = $payment->valor;
+                                                            // Se valor do payment for 0, calcular baseado na matrícula
+                                                            if (!$valorPayment || $valorPayment == 0) {
+                                                                $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                                $valorPayment = $valorParaParcelar / $matricula->numero_parcelas;
+                                                            }
+                                                        ?>
+                                                        R$ <?php echo e(number_format($valorPayment, 2, ',', '.')); ?>
 
                                                     <?php endif; ?>
                                                 </td>
@@ -1207,5 +1301,52 @@
     </div>
 </div>
 <?php $__env->stopPush(); ?>
+
+<?php $__env->startPush('scripts'); ?>
+<script>
+function regeneratePayments(matriculaId) {
+    if (!confirm('Isso irá recriar todas as parcelas pendentes. Os valores de mensalidade serão recalculados automaticamente. Deseja continuar?')) {
+        return;
+    }
+    
+    // Mostrar loading
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Regenerando...';
+    btn.disabled = true;
+    
+    fetch(`<?php echo e(url('dashboard/matriculas')); ?>/${matriculaId}/regenerate-payments`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Parcelas regeneradas com sucesso!');
+            if (data.redirect_url) {
+                window.location.href = data.redirect_url;
+            } else {
+                window.location.reload();
+            }
+        } else {
+            alert('Erro: ' + data.message);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao regenerar parcelas. Verifique o console para mais detalhes.');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+</script>
+<?php $__env->stopPush(); ?>
+
 <?php $__env->stopSection(); ?> 
 <?php echo $__env->make('layouts.admin', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH /home/douglas/Downloads/ec-complete-backup-20250728_105142/ec-complete-backup-20250813_144041/resources/views/admin/matriculas/show.blade.php ENDPATH**/ ?>
