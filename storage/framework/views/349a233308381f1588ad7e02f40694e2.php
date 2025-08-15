@@ -288,17 +288,47 @@
                         <?php else: ?>
                             <!-- Campos para Mercado Pago -->
                             <div class="col-md-6">
-                                <p class="mb-1"><strong>Valor da Matrícula:</strong></p>
-                                <p class="h5">R$ <?php echo e(number_format((float)($matricula->valor_matricula ?? 0), 2, ',', '.')); ?></p>
+                                <p class="mb-1"><strong>Valor Total do Curso:</strong></p>
+                                <p class="h5 text-primary">R$ <?php echo e(number_format((float)($matricula->valor_total_curso ?? 0), 2, ',', '.')); ?></p>
                             </div>
                             <div class="col-md-6">
-                                <p class="mb-1"><strong>Valor da Mensalidade:</strong></p>
-                                <p class="h5">R$ <?php echo e(number_format((float)($matricula->valor_mensalidade ?? 0), 2, ',', '.')); ?></p>
+                                <p class="mb-1"><strong>Tipo de Pagamento:</strong></p>
+                                <p class="h6">
+                                    <?php if($matricula->tipo_boleto === 'avista'): ?>
+                                        <span class="badge bg-success">À Vista</span>
+                                    <?php elseif($matricula->numero_parcelas > 1): ?>
+                                        <span class="badge bg-info"><?php echo e($matricula->numero_parcelas); ?>x Parcelas</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-warning">Pagamento Único</span>
+                                    <?php endif; ?>
+                                </p>
                             </div>
-                            <div class="col-md-12">
-                                <p class="mb-1"><strong>Dia do Vencimento:</strong></p>
-                                <p>Todo dia <?php echo e($matricula->dia_vencimento); ?></p>
-                            </div>
+                            
+                            <?php if($matricula->valor_matricula > 0): ?>
+                                <div class="col-md-6">
+                                    <p class="mb-1"><strong>Valor da Matrícula:</strong></p>
+                                    <p class="h6 text-success">R$ <?php echo e(number_format((float)$matricula->valor_matricula, 2, ',', '.')); ?></p>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if($matricula->numero_parcelas > 1): ?>
+                                <div class="col-md-6">
+                                    <p class="mb-1"><strong>Valor da Mensalidade:</strong></p>
+                                    <?php
+                                        $valorMensalidade = (float)($matricula->valor_mensalidade ?? 0);
+                                        if ($valorMensalidade == 0 && $matricula->numero_parcelas > 0) {
+                                            // Calcular se não estiver definido
+                                            $valorParaParcelar = (float)$matricula->valor_total_curso - (float)($matricula->valor_matricula ?? 0);
+                                            $valorMensalidade = $valorParaParcelar / $matricula->numero_parcelas;
+                                        }
+                                    ?>
+                                    <p class="h6">R$ <?php echo e(number_format($valorMensalidade, 2, ',', '.')); ?></p>
+                                </div>
+                                <div class="col-md-12">
+                                    <p class="mb-1"><strong>Dia do Vencimento:</strong></p>
+                                    <p><i class="fas fa-calendar me-1"></i>Todo dia <?php echo e($matricula->dia_vencimento); ?></p>
+                                </div>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -352,10 +382,8 @@
                                                     return str_contains(strtolower($payment->descricao), 'matrícula');
                                                 })->first();
                                             }
-                                            $dueDate = null;
-                                            if ($matricula->dia_vencimento) {
-                                                $dueDate = \Carbon\Carbon::now()->addDays(7); // Matrícula vence em 7 dias por padrão
-                                            }
+                                            // Matrícula sempre vence em 7 dias
+                                            $dueDate = \Carbon\Carbon::now()->addDays(7);
                                         ?>
                                         <tr class="<?php echo e($paymentMatricula ? ($paymentMatricula->status === 'paid' ? 'table-success' : 'table-warning') : 'table-light'); ?>">
                                             <td>
@@ -414,6 +442,24 @@
                                                         <a href="<?php echo e(route('admin.payments.show', $paymentMatricula)); ?>" class="btn btn-outline-primary btn-sm" title="Ver Detalhes">
                                                             <i class="fas fa-eye"></i>
                                                         </a>
+                                                        
+                                                        <?php if($paymentMatricula->hasBoleto()): ?>
+                                                            <a href="<?php echo e(route('admin.payments.download-boleto', $paymentMatricula)); ?>" 
+                                                               class="btn btn-outline-success btn-sm" 
+                                                               title="Download Boleto">
+                                                                <i class="fas fa-download"></i>
+                                                            </a>
+                                                        <?php endif; ?>
+                                                        
+                                                        <?php if($paymentMatricula->hasPixCode()): ?>
+                                                            <button type="button" 
+                                                                    class="btn btn-outline-info btn-sm" 
+                                                                    title="Código PIX"
+                                                                    onclick="showPixCode('<?php echo e($paymentMatricula->codigo_pix); ?>')">
+                                                                <i class="fas fa-qrcode"></i>
+                                                            </button>
+                                                        <?php endif; ?>
+                                                        
                                                         <?php if(!$paymentMatricula->isPaid()): ?>
                                                             <a href="<?php echo e(route('admin.payments.edit', $paymentMatricula)); ?>" class="btn btn-outline-warning btn-sm" title="Editar">
                                                                 <i class="fas fa-edit"></i>
@@ -434,8 +480,9 @@
                                                 $payment = $matricula->payments->where('numero_parcela', $i)->first();
                                                 $dueDate = null;
                                                 if ($matricula->dia_vencimento) {
-                                                    $dueDate = \Carbon\Carbon::now()->startOfMonth()->addMonths($i - 1)->setDay((int) $matricula->dia_vencimento);
-                                                    // Se a data já passou, vamos para o próximo mês
+                                                    // Mensalidades começam sempre no próximo mês
+                                                    $dueDate = \Carbon\Carbon::now()->startOfMonth()->addMonths($i)->setDay((int) $matricula->dia_vencimento);
+                                                    // Se a data calculada for antes de hoje, adicionar mais um mês
                                                     if ($dueDate->isPast()) {
                                                         $dueDate = $dueDate->addMonths(1);
                                                     }
@@ -547,7 +594,14 @@
 
                                                         </span>
                                                     <?php else: ?>
-                                                        <span class="badge bg-secondary">Não Cobrada</span>
+                                                        <?php
+                                                            // Mensalidades futuras são "Não Cobrada"
+                                                            // Mensalidades que já chegaram no período de cobrança são "Pendente"
+                                                            $isFuture = $dueDate && $dueDate > now();
+                                                            $statusText = $isFuture ? 'Não Cobrada' : 'Pendente';
+                                                            $statusColor = $isFuture ? 'secondary' : 'warning';
+                                                        ?>
+                                                        <span class="badge bg-<?php echo e($statusColor); ?>"><?php echo e($statusText); ?></span>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
@@ -802,7 +856,29 @@
                                             <?php endif; ?>
                                         <?php else: ?>
                                             
-                                            R$ <?php echo e(number_format($matricula->payments->sum('valor'), 2, ',', '.')); ?>
+                                            <?php
+                                                $valorTotalReal = 0;
+                                                
+                                                // Somar valor da matrícula se houver
+                                                if ($matricula->valor_matricula > 0) {
+                                                    $valorTotalReal += $matricula->valor_matricula;
+                                                }
+                                                
+                                                // Somar valor das mensalidades
+                                                if ($matricula->numero_parcelas > 1 && $matricula->tipo_boleto === 'parcelado') {
+                                                    $valorMensalidade = $matricula->valor_mensalidade;
+                                                    if (!$valorMensalidade || $valorMensalidade == 0) {
+                                                        // Calcular se não estiver definido
+                                                        $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
+                                                        $valorMensalidade = $valorParaParcelar / $matricula->numero_parcelas;
+                                                    }
+                                                    $valorTotalReal += ($valorMensalidade * $matricula->numero_parcelas);
+                                                } elseif ($matricula->numero_parcelas == 1) {
+                                                    // Pagamento à vista
+                                                    $valorTotalReal += ($matricula->valor_total_curso - ($matricula->valor_matricula ?? 0));
+                                                }
+                                            ?>
+                                            R$ <?php echo e(number_format($valorTotalReal, 2, ',', '.')); ?>
 
                                         <?php endif; ?>
                                     </div>

@@ -274,44 +274,43 @@
                                         <div class="mb-1">
                                             @php
                                                 $gateway = $matricula->payment_gateway ?? 'mercado_pago';
+                                                // Verificar se há pagamento de matrícula (entrada)
+                                                $pagamentoMatricula = $matricula->payments->where('numero_parcela', 0)->first();
+                                                $matriculaHasEntrada = $matricula->valor_matricula > 0;
                                             @endphp
                                             
                                             @if($gateway === 'mercado_pago')
-                                                {{-- Lógica original para Mercado Pago --}}
-                                                @if($matricula->tipo_boleto === 'avista')
-                                                    @if($matricula->forma_pagamento === 'cartao_credito')
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/Cartão</span>
-                                                    @elseif($matricula->forma_pagamento === 'pix')
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/PIX</span>
-                                                    @else
-                                                        <span class="badge bg-dark payment-type-badge">À Vista</span>
-                                                    @endif
+                                                {{-- Cartão de crédito sempre é À Vista (parcelamento no checkout MP) --}}
+                                                @if($matricula->forma_pagamento === 'cartao_credito')
+                                                    <span class="badge bg-dark payment-type-badge">À Vista/Cartão</span>
+                                                
+                                                {{-- PIX sempre é À Vista --}}
+                                                @elseif($matricula->forma_pagamento === 'pix')
+                                                    <span class="badge bg-dark payment-type-badge">À Vista/PIX</span>
+                                                
+                                                {{-- Para boleto: verificar se há matrícula pendente --}}
+                                                @elseif($matriculaHasEntrada && $pagamentoMatricula && $pagamentoMatricula->status !== 'paid')
+                                                    <span class="badge bg-dark payment-type-badge">Matrícula</span>
+                                                
+                                                {{-- Boleto: mostrar parcelas se matrícula paga ou não há matrícula --}}
+                                                @elseif($matricula->tipo_boleto === 'avista')
+                                                    <span class="badge bg-dark payment-type-badge">À Vista</span>
                                                 @elseif($totalParcelas == 1)
-                                                    @if($matricula->forma_pagamento === 'cartao_credito')
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/Cartão</span>
-                                                    @elseif($matricula->forma_pagamento === 'pix')
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/PIX</span>
-                                                    @else
-                                                        <span class="badge bg-dark payment-type-badge">À Vista</span>
-                                                    @endif
+                                                    <span class="badge bg-dark payment-type-badge">À Vista</span>
                                                 @elseif($totalParcelas > 1)
                                                     <span class="badge bg-dark payment-type-badge">{{ $parcelasPagas }}/{{ $totalParcelas }} Parcelas</span>
                                                 @elseif($matricula->payments->count() == 1)
-                                                    @if($matricula->forma_pagamento === 'cartao_credito')
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/Cartão</span>
-                                                    @elseif($matricula->forma_pagamento === 'pix')
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/PIX</span>
-                                                    @else
-                                                        <span class="badge bg-dark payment-type-badge">À Vista</span>
-                                                    @endif
+                                                    <span class="badge bg-dark payment-type-badge">À Vista</span>
                                                 @elseif($matricula->payments->count() > 1)
                                                     <span class="badge bg-dark payment-type-badge">{{ $parcelasPagas }}/{{ $matricula->payments->count() }} Pagamentos</span>
                                                 @else
                                                     <span class="badge bg-dark payment-type-badge">Sem Pagamento</span>
                                                 @endif
                                             @else
-                                                {{-- Lógica para outros bancos (Asas, Infiny, Cora) --}}
-                                                @if($totalParcelas == 1 || $matricula->payments->count() <= 1)
+                                                {{-- Lógica para outros bancos --}}
+                                                @if($matriculaHasEntrada && $pagamentoMatricula && $pagamentoMatricula->status !== 'paid')
+                                                    <span class="badge bg-dark payment-type-badge">Matrícula</span>
+                                                @elseif($totalParcelas == 1 || $matricula->payments->count() <= 1)
                                                     <span class="badge bg-dark payment-type-badge">À Vista/Manual</span>
                                                 @elseif($totalParcelas > 1)
                                                     <span class="badge bg-dark payment-type-badge">{{ $parcelasPagas }}/{{ $totalParcelas }} Parcelas</span>
@@ -325,64 +324,94 @@
                                         
                                         <!-- Linha Inferior: Status (Cores de Status) -->
                                         <div>
+                                            @php
+                                                // Verificar se há pagamento de matrícula (entrada)
+                                                $pagamentoMatricula = $matricula->payments->where('numero_parcela', 0)->first();
+                                                $mensalidades = $matricula->payments->where('numero_parcela', '>', 0);
+                                                $hasBoletosPendentes = $matricula->payments->where('status', 'pending')
+                                                    ->where('forma_pagamento', 'boleto')->count() > 0;
+                                            @endphp
+                                            
                                             @if($gateway === 'mercado_pago')
                                                 {{-- Status para Mercado Pago --}}
-                                                @if($matricula->tipo_boleto === 'avista')
+                                                
+                                                {{-- Cartão de crédito e PIX: sempre pagamento único --}}
+                                                @if($matricula->forma_pagamento === 'cartao_credito' || $matricula->forma_pagamento === 'pix')
                                                     @if($matricula->payments->where('status', 'paid')->count() > 0)
                                                         <span class="badge bg-success payment-status-badge">Pago</span>
                                                     @else
                                                         <span class="badge bg-warning payment-status-badge">Pendente</span>
                                                     @endif
-                                                @elseif($totalParcelas > 0)
-                                                    @if($totalParcelas == 1)
-                                                        @if($parcelasPagas == 1)
-                                                            <span class="badge bg-success payment-status-badge">Pago</span>
-                                                        @else
-                                                            <span class="badge bg-warning payment-status-badge">Pendente</span>
-                                                        @endif
+                                                
+                                                {{-- Se há pagamento de matrícula (entrada) para boleto --}}
+                                                @elseif($pagamentoMatricula)
+                                                    @if($pagamentoMatricula->status === 'paid')
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    @elseif($pagamentoMatricula->forma_pagamento === 'boleto')
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
                                                     @else
-                                                        @if($parcelasPagas == $totalParcelas)
-                                                            <span class="badge bg-success payment-status-badge">Pago</span>
-                                                        @elseif($parcelasVencidas > 0)
-                                                            <span class="badge bg-danger payment-status-badge">{{ $parcelasVencidas }} Vencida{{ $parcelasVencidas > 1 ? 's' : '' }}</span>
-                                                        @elseif($parcelasPendentes > 0)
-                                                            <span class="badge bg-warning payment-status-badge">{{ $parcelasPendentes }} Pendente{{ $parcelasPendentes > 1 ? 's' : '' }}</span>
-                                                        @else
-                                                            <span class="badge bg-secondary payment-status-badge">Aguardando</span>
-                                                        @endif
+                                                        <span class="badge bg-info payment-status-badge">Pendente</span>
                                                     @endif
+                                                
+                                                {{-- Pagamento único boleto (à vista) --}}
+                                                @elseif($matricula->tipo_boleto === 'avista' || $totalParcelas == 1)
+                                                    @if($matricula->payments->where('status', 'paid')->count() > 0)
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    @elseif($hasBoletosPendentes)
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    @else
+                                                        <span class="badge bg-info payment-status-badge">Pendente</span>
+                                                    @endif
+                                                
+                                                {{-- Pagamentos parcelados --}}
+                                                @elseif($totalParcelas > 1)
+                                                    @if($parcelasPagas == $totalParcelas)
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    @elseif($parcelasVencidas > 0)
+                                                        <span class="badge bg-danger payment-status-badge">{{ $parcelasVencidas }} Vencida{{ $parcelasVencidas > 1 ? 's' : '' }}</span>
+                                                    @elseif($parcelasPendentes > 0 && $hasBoletosPendentes)
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    @elseif($parcelasPendentes > 0)
+                                                        <span class="badge bg-info payment-status-badge">{{ $parcelasPendentes }} Pendente{{ $parcelasPendentes > 1 ? 's' : '' }}</span>
+                                                    @else
+                                                        <span class="badge bg-secondary payment-status-badge">Aguardando</span>
+                                                    @endif
+                                                
+                                                {{-- Outros casos --}}
                                                 @elseif($matricula->payments->count() > 0)
-                                                    @php
-                                                        $parcelasPagas = $matricula->payments->where('status', 'paid')->count();
-                                                        $totalPagamentos = $matricula->payments->count();
-                                                    @endphp
-                                                    @if($totalPagamentos == 1)
-                                                        @if($parcelasPagas == 1)
-                                                            <span class="badge bg-success payment-status-badge">Pago</span>
-                                                        @else
-                                                            <span class="badge bg-warning payment-status-badge">Pendente</span>
-                                                        @endif
-                                                    @else
-                                                        @if($parcelasPagas == $totalPagamentos)
-                                                            <span class="badge bg-success payment-status-badge">Pago</span>
-                                                        @else
-                                                            <span class="badge bg-warning payment-status-badge">{{ $totalPagamentos - $parcelasPagas }} Pendente{{ ($totalPagamentos - $parcelasPagas) > 1 ? 's' : '' }}</span>
-                                                        @endif
-                                                    @endif
-                                                @else
-                                                    <span class="badge bg-secondary payment-status-badge">Sem pagamentos</span>
-                                                @endif
-                                            @else
-                                                {{-- Status para outros bancos --}}
-                                                @if($matricula->payments->count() > 0)
                                                     @php
                                                         $parcelasPagas = $matricula->payments->where('status', 'paid')->count();
                                                         $totalPagamentos = $matricula->payments->count();
                                                     @endphp
                                                     @if($parcelasPagas == $totalPagamentos)
                                                         <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    @elseif($hasBoletosPendentes)
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    @else
+                                                        <span class="badge bg-info payment-status-badge">{{ $totalPagamentos - $parcelasPagas }} Pendente{{ ($totalPagamentos - $parcelasPagas) > 1 ? 's' : '' }}</span>
+                                                    @endif
+                                                @else
+                                                    <span class="badge bg-secondary payment-status-badge">Sem pagamentos</span>
+                                                @endif
+                                            @else
+                                                {{-- Status para outros bancos --}}
+                                                @if($pagamentoMatricula)
+                                                    @if($pagamentoMatricula->status === 'paid')
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    @else
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    @endif
+                                                @elseif($matricula->payments->count() > 0)
+                                                    @php
+                                                        $parcelasPagas = $matricula->payments->where('status', 'paid')->count();
+                                                        $totalPagamentos = $matricula->payments->count();
+                                                    @endphp
+                                                    @if($parcelasPagas == $totalPagamentos)
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    @elseif($hasBoletosPendentes)
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
                                                     @elseif($parcelasPagas > 0)
-                                                        <span class="badge bg-warning payment-status-badge">{{ $totalPagamentos - $parcelasPagas }} Pendente{{ ($totalPagamentos - $parcelasPagas) > 1 ? 's' : '' }}</span>
+                                                        <span class="badge bg-info payment-status-badge">{{ $totalPagamentos - $parcelasPagas }} Pendente{{ ($totalPagamentos - $parcelasPagas) > 1 ? 's' : '' }}</span>
                                                     @else
                                                         <span class="badge bg-warning payment-status-badge">Pendente</span>
                                                     @endif

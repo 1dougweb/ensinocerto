@@ -175,7 +175,7 @@ class Payment extends Model
         if ($this->data_vencimento < now()) {
             return 0;
         }
-        return now()->diffInDays($this->data_vencimento);
+        return (int) ceil(now()->diffInDays($this->data_vencimento, false));
     }
 
     public function getFormattedDaysOverdue()

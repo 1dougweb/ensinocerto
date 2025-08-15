@@ -471,7 +471,7 @@ class MatriculaController extends Controller
             // 🚨 PROTEÇÃO: Para outros gateways, apenas criar pagamento único
             $gateway = $matricula->payment_gateway ?? 'mercado_pago';
             
-            if ($gateway === 'mercado_pago' && $request->numero_parcelas > 1) {
+            if ($gateway === 'mercado_pago' && $matricula->numero_parcelas > 1) {
                 $this->createPaymentsForMatricula($matricula, $request);
             } else {
                 $this->createSinglePayment($matricula, $request);
@@ -1126,28 +1126,33 @@ class MatriculaController extends Controller
 
 
     /**
-     * Criar pagamentos parcelados
+     * Criar payment inicial (matrícula ou primeira mensalidade)
+     * As demais mensalidades são criadas pelo cron job
      */
     protected function createPaymentsForMatricula(Matricula $matricula, Request $request)
     {
         $paymentSettings = SystemSetting::getPaymentSettings();
         
-        // Pagamento da matrícula (se houver valor)
+        // CENÁRIO 1: COM valor de matrícula (entrada)
         if ($matricula->valor_matricula > 0) {
-            // Para matrícula, usar o dia de vencimento do próximo mês ou 7 dias se não especificado
-            $dataVencimentoMatricula = $matricula->dia_vencimento 
-                ? now()->addMonth()->day((int) $matricula->dia_vencimento)
-                : now()->addDays(7);
+            // Criar payment da MATRÍCULA (entrada)
+            $dataVencimentoMatricula = now()->addDays(1);
                 
             $paymentMatricula = Payment::create([
                 'matricula_id' => $matricula->id,
-                'valor' => $matricula->valor_matricula, // Usar dados da matrícula
-                'forma_pagamento' => $matricula->forma_pagamento, // Usar dados da matrícula
+                'valor' => $matricula->valor_matricula,
+                'forma_pagamento' => $matricula->forma_pagamento,
                 'data_vencimento' => $dataVencimentoMatricula,
                 'descricao' => 'Matrícula - ' . ($matricula->inscricao->curso->nome ?? 'Curso'),
-                'numero_parcela' => 0, // Matrícula usa número 0 para diferenciá-la das mensalidades
-                'total_parcelas' => $matricula->numero_parcelas + 1, // Usar dados da matrícula
+                'numero_parcela' => 0, // Matrícula usa número 0
+                'total_parcelas' => $matricula->numero_parcelas + 1,
                 'status' => 'pending',
+            ]);
+
+            Log::info('Payment da matrícula criado', [
+                'payment_id' => $paymentMatricula->id,
+                'matricula_id' => $matricula->id,
+                'valor' => $matricula->valor_matricula
             ]);
 
             // Integrar com Mercado Pago se configurado
@@ -1162,11 +1167,15 @@ class MatriculaController extends Controller
                         'mercadopago_data' => $mercadoPagoPayment['full_response']
                     ]);
 
+                    // Processar resposta para boletos (download PDF, etc.)
+                    if ($paymentMatricula->forma_pagamento === 'boleto') {
+                        $mercadoPagoService->processPaymentResponse($paymentMatricula, $mercadoPagoPayment['full_response']);
+                    }
+
                     Log::info('Pagamento de matrícula criado no Mercado Pago', [
                         'payment_id' => $paymentMatricula->id,
                         'mercadopago_id' => $mercadoPagoPayment['id']
                     ]);
-
 
                 } catch (\Exception $e) {
                     Log::error('Erro ao criar pagamento de matrícula no Mercado Pago', [
@@ -1186,150 +1195,93 @@ class MatriculaController extends Controller
                     'error' => $e->getMessage()
                 ]);
             }
+
+            // Marcar que há parcelas ativas para o cron job processar
+            $matricula->parcelas_ativas = true;
+            $matricula->saveQuietly(); // Evita disparar hooks updating/updated
         }
+        
+        // CENÁRIO 2: SEM valor de matrícula
+        else if ($matricula->numero_parcelas > 0) {
+            // Criar primeira mensalidade como pendente
+            $dataVencimento = now()->addMonths(1)->day((int) $matricula->dia_vencimento);
+            
+            $valorMensalidade = $matricula->valor_mensalidade;
+            if (!$valorMensalidade || $valorMensalidade == 0) {
+                $valorMensalidade = $matricula->valor_total_curso / $matricula->numero_parcelas;
+            }
+            
+            $paymentPrimeiro = Payment::create([
+                'matricula_id' => $matricula->id,
+                'valor' => $valorMensalidade,
+                'forma_pagamento' => $matricula->forma_pagamento,
+                'data_vencimento' => $dataVencimento,
+                'descricao' => 'Mensalidade 1/' . $matricula->numero_parcelas . ' - ' . ($matricula->inscricao->curso->nome ?? 'Curso'),
+                'numero_parcela' => 1,
+                'total_parcelas' => $matricula->numero_parcelas,
+                'status' => 'pending',
+            ]);
 
-        // Salvar informações do parcelamento na matrícula para processamento futuro
-        // 🚨 USAR saveQuietly() para evitar disparar events e loops
-        $matricula->parcelas_ativas = true;
-        $matricula->saveQuietly(); // Evita disparar hooks updating/updated
+            Log::info('Primeira mensalidade criada (sem matrícula)', [
+                'payment_id' => $paymentPrimeiro->id,
+                'matricula_id' => $matricula->id
+            ]);
 
-        // Criar mensalidades se houver parcelamento configurado
-        if ($matricula->numero_parcelas > 0) {
-            // Para boleto parcelado, criar TODAS as parcelas automaticamente
-            if ($matricula->tipo_boleto === 'parcelado') {
-                for ($i = 1; $i <= $matricula->numero_parcelas; $i++) {
-                    // 🚨 PROTEÇÃO: Verificar se já existe payment para esta parcela
-                    $existingPayment = Payment::where('matricula_id', $matricula->id)
-                        ->where('numero_parcela', $i)
-                        ->first();
+            // Integrar com Mercado Pago se configurado
+            if ($paymentSettings['mercadopago_enabled']) {
+                try {
+                    $mercadoPagoService = app(MercadoPagoService::class);
+                    $mercadoPagoPayment = $mercadoPagoService->createPayment($paymentPrimeiro);
                     
-                    if ($existingPayment) {
-                        Log::warning('Payment já existe para esta parcela, pulando criação', [
-                            'matricula_id' => $matricula->id,
-                            'numero_parcela' => $i,
-                            'existing_payment_id' => $existingPayment->id
-                        ]);
-                        continue;
-                    }
-                    
-                    $dataVencimento = now()->addMonths($i)->day((int) $matricula->dia_vencimento);
-                    
-                    // Calcular valor da mensalidade
-                    $valorMensalidade = $matricula->valor_mensalidade;
-                    if (!$valorMensalidade || $valorMensalidade == 0) {
-                        // Se valor_mensalidade for 0, calcular baseado no valor total menos matrícula
-                        $valorParaParcelar = $matricula->valor_total_curso - ($matricula->valor_matricula ?? 0);
-                        $valorMensalidade = $valorParaParcelar / $matricula->numero_parcelas;
-                    }
-                    
-                    $paymentMensalidade = Payment::create([
-                        'matricula_id' => $matricula->id,
-                        'valor' => $valorMensalidade,
-                        'forma_pagamento' => $matricula->forma_pagamento,
-                        'data_vencimento' => $dataVencimento,
-                        'descricao' => 'Mensalidade ' . $i . '/' . $matricula->numero_parcelas . ' - ' . ($matricula->inscricao->curso->nome ?? 'Curso'),
-                        'numero_parcela' => $i,
-                        'total_parcelas' => $matricula->numero_parcelas,
-                        'status' => 'pending',
+                    $paymentPrimeiro->update([
+                        'mercadopago_id' => $mercadoPagoPayment['id'],
+                        'mercadopago_status' => $mercadoPagoPayment['status'],
+                        'mercadopago_data' => $mercadoPagoPayment['full_response']
                     ]);
 
-                    // Integrar com Mercado Pago se configurado
-                    if ($paymentSettings['mercadopago_enabled']) {
-                        try {
-                            $mercadoPagoService = app(MercadoPagoService::class);
-                            $mercadoPagoPayment = $mercadoPagoService->createPayment($paymentMensalidade);
-                            
-                            $paymentMensalidade->update([
-                                'mercadopago_id' => $mercadoPagoPayment['id'],
-                                'mercadopago_status' => $mercadoPagoPayment['status'],
-                                'mercadopago_data' => $mercadoPagoPayment['full_response']
-                            ]);
-
-                            Log::info("Mensalidade {$i} criada no Mercado Pago", [
-                                'payment_id' => $paymentMensalidade->id,
-                                'mercadopago_id' => $mercadoPagoPayment['id']
-                            ]);
-
-                        } catch (\Exception $e) {
-                            Log::error("Erro ao criar mensalidade {$i} no Mercado Pago", [
-                                'payment_id' => $paymentMensalidade->id,
-                                'error' => $e->getMessage()
-                            ]);
-                        }
+                    // Processar resposta para boletos (download PDF, etc.)
+                    if ($paymentPrimeiro->forma_pagamento === 'boleto') {
+                        $mercadoPagoService->processPaymentResponse($paymentPrimeiro, $mercadoPagoPayment['full_response']);
                     }
 
-                    // Enviar notificações de pagamento criado
-                    try {
-                        $notificationService = app(PaymentNotificationService::class);
-                        $notificationService->sendPaymentCreatedNotifications($paymentMensalidade);
-                    } catch (\Exception $e) {
-                        Log::error("Erro ao enviar notificações da mensalidade {$i}", [
-                            'payment_id' => $paymentMensalidade->id,
-                            'error' => $e->getMessage()
-                        ]);
-                    }
-                }
-            } else {
-                // Para outros métodos, criar apenas a primeira mensalidade (comportamento atual)
-                $dataVencimento = now()->addMonth()->day((int) $matricula->dia_vencimento);
-                
-                $paymentMensalidade = Payment::create([
-                    'matricula_id' => $matricula->id,
-                    'valor' => $matricula->valor_mensalidade,
-                    'forma_pagamento' => $matricula->forma_pagamento,
-                    'data_vencimento' => $dataVencimento,
-                    'descricao' => 'Mensalidade 1/' . $matricula->numero_parcelas . ' - ' . ($matricula->inscricao->curso->nome ?? 'Curso'),
-                    'numero_parcela' => 1,
-                    'total_parcelas' => $matricula->numero_parcelas,
-                    'status' => 'pending',
-                ]);
+                    Log::info('Primeira mensalidade criada no Mercado Pago', [
+                        'payment_id' => $paymentPrimeiro->id,
+                        'mercadopago_id' => $mercadoPagoPayment['id']
+                    ]);
 
-                // Integrar com Mercado Pago se configurado
-                if ($paymentSettings['mercadopago_enabled']) {
-                    try {
-                        $mercadoPagoService = app(MercadoPagoService::class);
-                        $mercadoPagoPayment = $mercadoPagoService->createPayment($paymentMensalidade);
-                        
-                        $paymentMensalidade->update([
-                            'mercadopago_id' => $mercadoPagoPayment['id'],
-                            'mercadopago_status' => $mercadoPagoPayment['status'],
-                            'mercadopago_data' => $mercadoPagoPayment['full_response']
-                        ]);
-
-                        Log::info('Primeira mensalidade criada no Mercado Pago', [
-                            'payment_id' => $paymentMensalidade->id,
-                            'mercadopago_id' => $mercadoPagoPayment['id']
-                        ]);
-
-                    } catch (\Exception $e) {
-                        Log::error('Erro ao criar primeira mensalidade no Mercado Pago', [
-                            'payment_id' => $paymentMensalidade->id,
-                            'error' => $e->getMessage()
-                        ]);
-                    }
-                }
-
-                // Enviar notificações de pagamento criado
-                try {
-                    $notificationService = app(PaymentNotificationService::class);
-                    $notificationService->sendPaymentCreatedNotifications($paymentMensalidade);
                 } catch (\Exception $e) {
-                    Log::error('Erro ao enviar notificações da primeira mensalidade', [
-                        'payment_id' => $paymentMensalidade->id,
+                    Log::error('Erro ao criar primeira mensalidade no Mercado Pago', [
+                        'payment_id' => $paymentPrimeiro->id,
                         'error' => $e->getMessage()
                     ]);
                 }
             }
-        }
 
-        Log::info('Pagamentos criados para matrícula parcelada', [
+            // Enviar notificações de pagamento criado
+            try {
+                $notificationService = app(PaymentNotificationService::class);
+                $notificationService->sendPaymentCreatedNotifications($paymentPrimeiro);
+            } catch (\Exception $e) {
+                Log::error('Erro ao enviar notificações da primeira mensalidade', [
+                    'payment_id' => $paymentPrimeiro->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+
+            // Marcar que há parcelas ativas para o cron job processar
+            $matricula->parcelas_ativas = true;
+            $matricula->saveQuietly(); // Evita disparar hooks updating/updated
+        }
+        
+        // As demais mensalidades serão criadas pelo cron job automaticamente
+        Log::info('Payment inicial criado. Cron job criará as demais mensalidades.', [
             'matricula_id' => $matricula->id,
-            'total_parcelas' => $matricula->numero_parcelas,
             'valor_matricula' => $matricula->valor_matricula,
-            'valor_mensalidade' => $matricula->valor_mensalidade,
-            'mercadopago_enabled' => $paymentSettings['mercadopago_enabled']
+            'numero_parcelas' => $matricula->numero_parcelas
         ]);
     }
+
+
 
     /**
      * Criar pagamento único
@@ -1364,6 +1316,11 @@ class MatriculaController extends Controller
                     'mercadopago_status' => $mercadoPagoPayment['status'],
                     'mercadopago_data' => $mercadoPagoPayment['full_response']
                 ]);
+
+                // Processar resposta para boletos (download PDF, etc.)
+                if ($payment->forma_pagamento === 'boleto') {
+                    $mercadoPagoService->processPaymentResponse($payment, $mercadoPagoPayment['full_response']);
+                }
 
                 Log::info('Pagamento criado no Mercado Pago', [
                     'payment_id' => $payment->id,

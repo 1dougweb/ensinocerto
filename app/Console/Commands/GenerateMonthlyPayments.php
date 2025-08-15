@@ -176,7 +176,9 @@ class GenerateMonthlyPayments extends Command
      */
     protected function calculateNextDueDate(Matricula $matricula, $parcelaNumber)
     {
-        // Se há valor de matrícula, a primeira mensalidade é a parcela 2
+        // Se há valor de matrícula, as mensalidades começam no próximo mês
+        // Parcela 1 = mês 1, Parcela 2 = mês 2, etc. (quando há valor de matrícula)
+        // Sem valor de matrícula: Parcela 1 = mês 1, Parcela 2 = mês 2, etc.
         $monthsToAdd = $matricula->valor_matricula > 0 ? $parcelaNumber : $parcelaNumber;
         
         return now()->addMonths($monthsToAdd)->day($matricula->dia_vencimento);

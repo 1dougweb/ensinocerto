@@ -275,36 +275,33 @@
                                         <div class="mb-1">
                                             <?php
                                                 $gateway = $matricula->payment_gateway ?? 'mercado_pago';
+                                                // Verificar se há pagamento de matrícula (entrada)
+                                                $pagamentoMatricula = $matricula->payments->where('numero_parcela', 0)->first();
+                                                $matriculaHasEntrada = $matricula->valor_matricula > 0;
                                             ?>
                                             
                                             <?php if($gateway === 'mercado_pago'): ?>
                                                 
-                                                <?php if($matricula->tipo_boleto === 'avista'): ?>
-                                                    <?php if($matricula->forma_pagamento === 'cartao_credito'): ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/Cartão</span>
-                                                    <?php elseif($matricula->forma_pagamento === 'pix'): ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/PIX</span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista</span>
-                                                    <?php endif; ?>
+                                                <?php if($matricula->forma_pagamento === 'cartao_credito'): ?>
+                                                    <span class="badge bg-dark payment-type-badge">À Vista/Cartão</span>
+                                                
+                                                
+                                                <?php elseif($matricula->forma_pagamento === 'pix'): ?>
+                                                    <span class="badge bg-dark payment-type-badge">À Vista/PIX</span>
+                                                
+                                                
+                                                <?php elseif($matriculaHasEntrada && $pagamentoMatricula && $pagamentoMatricula->status !== 'paid'): ?>
+                                                    <span class="badge bg-dark payment-type-badge">Matrícula</span>
+                                                
+                                                
+                                                <?php elseif($matricula->tipo_boleto === 'avista'): ?>
+                                                    <span class="badge bg-dark payment-type-badge">À Vista</span>
                                                 <?php elseif($totalParcelas == 1): ?>
-                                                    <?php if($matricula->forma_pagamento === 'cartao_credito'): ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/Cartão</span>
-                                                    <?php elseif($matricula->forma_pagamento === 'pix'): ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/PIX</span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista</span>
-                                                    <?php endif; ?>
+                                                    <span class="badge bg-dark payment-type-badge">À Vista</span>
                                                 <?php elseif($totalParcelas > 1): ?>
                                                     <span class="badge bg-dark payment-type-badge"><?php echo e($parcelasPagas); ?>/<?php echo e($totalParcelas); ?> Parcelas</span>
                                                 <?php elseif($matricula->payments->count() == 1): ?>
-                                                    <?php if($matricula->forma_pagamento === 'cartao_credito'): ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/Cartão</span>
-                                                    <?php elseif($matricula->forma_pagamento === 'pix'): ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista/PIX</span>
-                                                    <?php else: ?>
-                                                        <span class="badge bg-dark payment-type-badge">À Vista</span>
-                                                    <?php endif; ?>
+                                                    <span class="badge bg-dark payment-type-badge">À Vista</span>
                                                 <?php elseif($matricula->payments->count() > 1): ?>
                                                     <span class="badge bg-dark payment-type-badge"><?php echo e($parcelasPagas); ?>/<?php echo e($matricula->payments->count()); ?> Pagamentos</span>
                                                 <?php else: ?>
@@ -312,7 +309,9 @@
                                                 <?php endif; ?>
                                             <?php else: ?>
                                                 
-                                                <?php if($totalParcelas == 1 || $matricula->payments->count() <= 1): ?>
+                                                <?php if($matriculaHasEntrada && $pagamentoMatricula && $pagamentoMatricula->status !== 'paid'): ?>
+                                                    <span class="badge bg-dark payment-type-badge">Matrícula</span>
+                                                <?php elseif($totalParcelas == 1 || $matricula->payments->count() <= 1): ?>
                                                     <span class="badge bg-dark payment-type-badge">À Vista/Manual</span>
                                                 <?php elseif($totalParcelas > 1): ?>
                                                     <span class="badge bg-dark payment-type-badge"><?php echo e($parcelasPagas); ?>/<?php echo e($totalParcelas); ?> Parcelas</span>
@@ -326,64 +325,94 @@
                                         
                                         <!-- Linha Inferior: Status (Cores de Status) -->
                                         <div>
+                                            <?php
+                                                // Verificar se há pagamento de matrícula (entrada)
+                                                $pagamentoMatricula = $matricula->payments->where('numero_parcela', 0)->first();
+                                                $mensalidades = $matricula->payments->where('numero_parcela', '>', 0);
+                                                $hasBoletosPendentes = $matricula->payments->where('status', 'pending')
+                                                    ->where('forma_pagamento', 'boleto')->count() > 0;
+                                            ?>
+                                            
                                             <?php if($gateway === 'mercado_pago'): ?>
                                                 
-                                                <?php if($matricula->tipo_boleto === 'avista'): ?>
+                                                
+                                                
+                                                <?php if($matricula->forma_pagamento === 'cartao_credito' || $matricula->forma_pagamento === 'pix'): ?>
                                                     <?php if($matricula->payments->where('status', 'paid')->count() > 0): ?>
                                                         <span class="badge bg-success payment-status-badge">Pago</span>
                                                     <?php else: ?>
                                                         <span class="badge bg-warning payment-status-badge">Pendente</span>
                                                     <?php endif; ?>
-                                                <?php elseif($totalParcelas > 0): ?>
-                                                    <?php if($totalParcelas == 1): ?>
-                                                        <?php if($parcelasPagas == 1): ?>
-                                                            <span class="badge bg-success payment-status-badge">Pago</span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-warning payment-status-badge">Pendente</span>
-                                                        <?php endif; ?>
-                                                    <?php else: ?>
-                                                        <?php if($parcelasPagas == $totalParcelas): ?>
-                                                            <span class="badge bg-success payment-status-badge">Pago</span>
-                                                        <?php elseif($parcelasVencidas > 0): ?>
-                                                            <span class="badge bg-danger payment-status-badge"><?php echo e($parcelasVencidas); ?> Vencida<?php echo e($parcelasVencidas > 1 ? 's' : ''); ?></span>
-                                                        <?php elseif($parcelasPendentes > 0): ?>
-                                                            <span class="badge bg-warning payment-status-badge"><?php echo e($parcelasPendentes); ?> Pendente<?php echo e($parcelasPendentes > 1 ? 's' : ''); ?></span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-secondary payment-status-badge">Aguardando</span>
-                                                        <?php endif; ?>
-                                                    <?php endif; ?>
-                                                <?php elseif($matricula->payments->count() > 0): ?>
-                                                    <?php
-                                                        $parcelasPagas = $matricula->payments->where('status', 'paid')->count();
-                                                        $totalPagamentos = $matricula->payments->count();
-                                                    ?>
-                                                    <?php if($totalPagamentos == 1): ?>
-                                                        <?php if($parcelasPagas == 1): ?>
-                                                            <span class="badge bg-success payment-status-badge">Pago</span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-warning payment-status-badge">Pendente</span>
-                                                        <?php endif; ?>
-                                                    <?php else: ?>
-                                                        <?php if($parcelasPagas == $totalPagamentos): ?>
-                                                            <span class="badge bg-success payment-status-badge">Pago</span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-warning payment-status-badge"><?php echo e($totalPagamentos - $parcelasPagas); ?> Pendente<?php echo e(($totalPagamentos - $parcelasPagas) > 1 ? 's' : ''); ?></span>
-                                                        <?php endif; ?>
-                                                    <?php endif; ?>
-                                                <?php else: ?>
-                                                    <span class="badge bg-secondary payment-status-badge">Sem pagamentos</span>
-                                                <?php endif; ?>
-                                            <?php else: ?>
                                                 
-                                                <?php if($matricula->payments->count() > 0): ?>
+                                                
+                                                <?php elseif($pagamentoMatricula): ?>
+                                                    <?php if($pagamentoMatricula->status === 'paid'): ?>
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    <?php elseif($pagamentoMatricula->forma_pagamento === 'boleto'): ?>
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-info payment-status-badge">Pendente</span>
+                                                    <?php endif; ?>
+                                                
+                                                
+                                                <?php elseif($matricula->tipo_boleto === 'avista' || $totalParcelas == 1): ?>
+                                                    <?php if($matricula->payments->where('status', 'paid')->count() > 0): ?>
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    <?php elseif($hasBoletosPendentes): ?>
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-info payment-status-badge">Pendente</span>
+                                                    <?php endif; ?>
+                                                
+                                                
+                                                <?php elseif($totalParcelas > 1): ?>
+                                                    <?php if($parcelasPagas == $totalParcelas): ?>
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    <?php elseif($parcelasVencidas > 0): ?>
+                                                        <span class="badge bg-danger payment-status-badge"><?php echo e($parcelasVencidas); ?> Vencida<?php echo e($parcelasVencidas > 1 ? 's' : ''); ?></span>
+                                                    <?php elseif($parcelasPendentes > 0 && $hasBoletosPendentes): ?>
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    <?php elseif($parcelasPendentes > 0): ?>
+                                                        <span class="badge bg-info payment-status-badge"><?php echo e($parcelasPendentes); ?> Pendente<?php echo e($parcelasPendentes > 1 ? 's' : ''); ?></span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-secondary payment-status-badge">Aguardando</span>
+                                                    <?php endif; ?>
+                                                
+                                                
+                                                <?php elseif($matricula->payments->count() > 0): ?>
                                                     <?php
                                                         $parcelasPagas = $matricula->payments->where('status', 'paid')->count();
                                                         $totalPagamentos = $matricula->payments->count();
                                                     ?>
                                                     <?php if($parcelasPagas == $totalPagamentos): ?>
                                                         <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    <?php elseif($hasBoletosPendentes): ?>
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-info payment-status-badge"><?php echo e($totalPagamentos - $parcelasPagas); ?> Pendente<?php echo e(($totalPagamentos - $parcelasPagas) > 1 ? 's' : ''); ?></span>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary payment-status-badge">Sem pagamentos</span>
+                                                <?php endif; ?>
+                                            <?php else: ?>
+                                                
+                                                <?php if($pagamentoMatricula): ?>
+                                                    <?php if($pagamentoMatricula->status === 'paid'): ?>
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
+                                                    <?php endif; ?>
+                                                <?php elseif($matricula->payments->count() > 0): ?>
+                                                    <?php
+                                                        $parcelasPagas = $matricula->payments->where('status', 'paid')->count();
+                                                        $totalPagamentos = $matricula->payments->count();
+                                                    ?>
+                                                    <?php if($parcelasPagas == $totalPagamentos): ?>
+                                                        <span class="badge bg-success payment-status-badge">Pago</span>
+                                                    <?php elseif($hasBoletosPendentes): ?>
+                                                        <span class="badge bg-warning payment-status-badge">Pendente</span>
                                                     <?php elseif($parcelasPagas > 0): ?>
-                                                        <span class="badge bg-warning payment-status-badge"><?php echo e($totalPagamentos - $parcelasPagas); ?> Pendente<?php echo e(($totalPagamentos - $parcelasPagas) > 1 ? 's' : ''); ?></span>
+                                                        <span class="badge bg-info payment-status-badge"><?php echo e($totalPagamentos - $parcelasPagas); ?> Pendente<?php echo e(($totalPagamentos - $parcelasPagas) > 1 ? 's' : ''); ?></span>
                                                     <?php else: ?>
                                                         <span class="badge bg-warning payment-status-badge">Pendente</span>
                                                     <?php endif; ?>
