@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Google Cloud Service Account credentials
+storage/app/google-credentials.json
