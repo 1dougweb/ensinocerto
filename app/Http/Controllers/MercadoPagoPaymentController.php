@@ -337,6 +337,13 @@ class MercadoPagoPaymentController extends Controller
                     'success' => config('app.url') . '/payment/success?payment_id=' . $payment->id,
                     'failure' => config('app.url') . '/payment/failure?payment_id=' . $payment->id,
                     'pending' => config('app.url') . '/payment/pending?payment_id=' . $payment->id
+                ],
+                'payment_methods' => [
+                    'installments' => 12, // Máximo de 12 parcelas
+                    'default_installments' => 1, // Padrão: 1 parcela (à vista)
+                    'installments_cost' => 0, // Custo de juros zero para o comprador
+                    'excluded_payment_methods' => [],
+                    'excluded_payment_types' => []
                 ]
             ]);
             

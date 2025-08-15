@@ -805,7 +805,14 @@ class MercadoPagoService
                 ],
                 'external_reference' => "matricula_pagamento_{$payment->id}",
                 'expires' => true,
-                'expiration_date_to' => now()->addDays(1)->toISOString()
+                'expiration_date_to' => now()->addDays(1)->toISOString(),
+                'payment_methods' => [
+                    'installments' => 12, // Máximo de 12 parcelas
+                    'default_installments' => 1, // Padrão: 1 parcela (à vista)
+                    'installments_cost' => 0, // Custo de juros zero para o comprador
+                    'excluded_payment_methods' => [],
+                    'excluded_payment_types' => []
+                ]
             ];
 
             // Headers obrigatórios
