@@ -1076,37 +1076,7 @@ endif;
 unset($__errorArgs, $__bag); ?>
                             </div>
 
-                            <!-- Passo 5: Valor da Mensalidade -->
-                            <div class="col-md-3 mb-3 campo-mensalidade passo-5" style="display: none;">
-                                <label for="valor_mensalidade" class="form-label">Valor da Mensalidade</label>
-                                <div class="input-group">
-                                    <span class="input-group-text">R$</span>
-                                    <input type="number" 
-                                           class="form-control <?php $__errorArgs = ['valor_mensalidade'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>" 
-                                           id="valor_mensalidade" 
-                                           name="valor_mensalidade" 
-                                           step="0.01" 
-                                           min="0" 
-                                           value="<?php echo e(old('valor_mensalidade', $matricula->valor_mensalidade)); ?>" readonly>
-                                </div>
-                                <?php $__errorArgs = ['valor_mensalidade'];
-$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
-if ($__bag->has($__errorArgs[0])) :
-if (isset($message)) { $__messageOriginal = $message; }
-$message = $__bag->first($__errorArgs[0]); ?>
-                                    <div class="invalid-feedback"><?php echo e($message); ?></div>
-                                <?php unset($message);
-if (isset($__messageOriginal)) { $message = $__messageOriginal; }
-endif;
-unset($__errorArgs, $__bag); ?>
-                            </div>
+
 
                             <!-- Passo 5: Número de Parcelas -->
                             <div class="col-md-3 mb-3 campo-parcelas passo-5" style="display: none;">
@@ -1427,7 +1397,6 @@ document.addEventListener('DOMContentLoaded', function() {
         numeroParcelas: $('#numero_parcelas'),
         desconto: $('#desconto'),
         percentualJuros: $('#percentual_juros'),
-        valorMensalidade: $('#valor_mensalidade'),
         displays: {
             total: $('#display-total'),
             matricula: $('#display-matricula'),
@@ -1458,28 +1427,24 @@ document.addEventListener('DOMContentLoaded', function() {
         const valorMatricula = parseFloat(matriculaElements.valorMatricula.val()) || 0;
         const numeroParcelas = parseInt(matriculaElements.numeroParcelas.val()) || 1;
         const desconto = parseFloat(matriculaElements.desconto.val()) || 0;
-        const juros = parseFloat(matriculaElements.percentualJuros.val()) || 0;
 
         // Cálculo do desconto
         const valorComDesconto = valorTotal * (1 - desconto / 100);
 
-        // Cálculo das parcelas (sem aplicar juros antecipados)
+        // Para cartão de crédito, não há parcelas - pagamento único do valor total
         let valorMensalidade = 0;
         let valorTotalComJuros = valorComDesconto;
 
         if (numeroParcelas > 1) {
             const valorParaParcelar = valorComDesconto - valorMatricula;
-            
-            // Não aplicar juros no cálculo inicial - juros serão aplicados apenas em parcelas vencidas
             valorMensalidade = valorParaParcelar / numeroParcelas;
-            valorTotalComJuros = valorComDesconto; // Sem juros antecipados
+            valorTotalComJuros = valorComDesconto;
         }
 
         // Atualizar displays
         matriculaElements.displays.total.text(formatarReal(valorTotalComJuros));
         matriculaElements.displays.matricula.text(formatarReal(valorMatricula));
         matriculaElements.displays.mensalidade.text(formatarReal(valorMensalidade));
-        matriculaElements.valorMensalidade.val(valorMensalidade.toFixed(2));
 
         // Ocultar campo de juros no resumo financeiro (os juros só serão aplicados em parcelas vencidas)
         $('.campo-display-juros').hide();

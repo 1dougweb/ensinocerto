@@ -1085,10 +1085,22 @@ class PaymentNotificationService
                 $message .= "🧾 *Parcela {$payment->numero_parcela}:*\n";
                 $message .= "💰 R$ " . number_format($payment->valor, 2, ',', '.') . " - " . $payment->data_vencimento->format('d/m/Y') . "\n";
                 
-                // Adicionar link do boleto se disponível
-                if ($payment->mercadopago_data && isset($payment->mercadopago_data['transactions']['payments'][0]['payment_method']['ticket_url'])) {
-                    $ticketUrl = $payment->mercadopago_data['transactions']['payments'][0]['payment_method']['ticket_url'];
-                    $message .= "🔗 {$ticketUrl}\n";
+                // Adicionar link do pagamento se disponível
+                $paymentLink = null;
+                
+                if ($payment->mercadopago_data) {
+                    // Para boleto e PIX: buscar ticket_url
+                    if (isset($payment->mercadopago_data['transactions']['payments'][0]['payment_method']['ticket_url'])) {
+                        $paymentLink = $payment->mercadopago_data['transactions']['payments'][0]['payment_method']['ticket_url'];
+                    }
+                    // Para cartão de crédito: buscar init_point
+                    elseif (isset($payment->mercadopago_data['init_point'])) {
+                        $paymentLink = $payment->mercadopago_data['init_point'];
+                    }
+                }
+                
+                if ($paymentLink) {
+                    $message .= "🔗 {$paymentLink}\n";
                 } else {
                     $message .= "⏳ *Link em processamento...*\n";
                 }

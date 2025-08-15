@@ -782,16 +782,15 @@ class MercadoPagoService
                 throw new \Exception('Matrícula não encontrada para o pagamento');
             }
 
-            // Para cartão de crédito, usar o valor total da matrícula
-            // O parcelamento é configurado dentro do Mercado Pago
+            // Para cartão de crédito, usar o valor total do curso (pagamento único)
             $valorTotal = $matricula->valor_total_curso;
-
+            
             // Preparar dados da preference
             $preferenceData = [
                 'items' => [
                     [
-                        'title' => $payment->descricao,
-                        'unit_price' => (float) $valorTotal,
+                        'title' => 'Pagamento do Curso - ' . ($matricula->inscricao->curso->nome ?? 'Curso'),
+                        'unit_price' => (float) $valorTotal, // Valor total do curso para cartão
                         'quantity' => 1,
                         'currency_id' => 'BRL'
                     ]

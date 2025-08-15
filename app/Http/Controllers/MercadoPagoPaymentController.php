@@ -37,10 +37,17 @@ class MercadoPagoPaymentController extends Controller
                 ], 403);
             }
             
-            // Verificar se o pagamento está vencido e pendente
-            if ($payment->data_vencimento >= now() || $payment->status !== 'pending') {
+            // Verificar se o pagamento está pendente (pode estar vencido ou não)
+            if ($payment->status !== 'pending') {
                 return response()->json([
-                    'error' => 'Pagamento não elegível para link de pagamento'
+                    'error' => 'Pagamento não está pendente (status: ' . $payment->status . ')'
+                ], 400);
+            }
+            
+            // Verificar se o pagamento não está muito vencido (mais de 30 dias)
+            if ($payment->data_vencimento < now()->subDays(30)) {
+                return response()->json([
+                    'error' => 'Pagamento muito vencido (mais de 30 dias)'
                 ], 400);
             }
             
@@ -158,6 +165,25 @@ class MercadoPagoPaymentController extends Controller
     protected function createDirectBoletoLink(Payment $payment, string $accessToken): string
     {
         try {
+            // Preparar dados do pagador com endereço obrigatório para boleto
+            $payerData = [
+                'email' => $payment->matricula->email ?? 'teste@exemplo.com',
+                'first_name' => explode(' ', $payment->matricula->nome_completo ?? 'Nome')[0],
+                'last_name' => explode(' ', $payment->matricula->nome_completo ?? 'Sobrenome')[1] ?? 'Sobrenome',
+                'identification' => [
+                    'type' => 'CPF',
+                    'number' => preg_replace('/[^0-9]/', '', $payment->matricula->cpf ?? '11111111111')
+                ],
+                'address' => [
+                    'zip_code' => preg_replace('/[^0-9]/', '', $payment->matricula->cep ?? '01310100'),
+                    'street_name' => $payment->matricula->logradouro ?? 'Av. Paulista',
+                    'street_number' => $payment->matricula->numero ?? '1000',
+                    'neighborhood' => $payment->matricula->bairro ?? 'Bela Vista',
+                    'city' => $payment->matricula->cidade ?? 'São Paulo',
+                    'state' => strtoupper(substr($payment->matricula->estado ?? 'SP', 0, 2))
+                ]
+            ];
+
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $accessToken,
                 'Content-Type' => 'application/json',
@@ -166,27 +192,18 @@ class MercadoPagoPaymentController extends Controller
                 'type' => 'online',
                 'processing_mode' => 'automatic',
                 'external_reference' => 'payment_' . $payment->id,
-                'total_amount' => $payment->valor * 100, // Mercado Pago usa centavos
-                'description' => $payment->descricao,
-                'payer' => [
-                    'email' => $payment->matricula->email,
-                    'first_name' => explode(' ', $payment->matricula->nome_completo)[0] ?? '',
-                    'last_name' => explode(' ', $payment->matricula->nome_completo)[1] ?? '',
-                    'identification' => [
-                        'type' => 'CPF',
-                        'number' => $payment->matricula->cpf ?? '00000000000'
-                    ]
-                ],
+                'total_amount' => (string) $payment->valor, // API v1/orders usa valor direto, não centavos
+                'description' => $payment->descricao ?? 'Pagamento de matrícula',
+                'payer' => $payerData,
                 'transactions' => [
-                    [
-                        'payments' => [
-                            [
-                                'payment_method' => [
-                                    'id' => 'boleto',
-                                    'type' => 'ticket'
-                                ],
-                                'expiration_time' => 'P3D' // 3 dias
-                            ]
+                    'payments' => [
+                        [
+                            'amount' => (string) $payment->valor,
+                            'payment_method' => [
+                                'id' => 'boleto',
+                                'type' => 'ticket'
+                            ],
+                            'expiration_time' => 'P3D' // 3 dias para vencimento
                         ]
                     ]
                 ]
@@ -194,12 +211,27 @@ class MercadoPagoPaymentController extends Controller
             
             if ($response->successful()) {
                 $data = $response->json();
-                return $data['ticket_url'] ?? config('app.url') . '/api/boleto/generate-second-via?payment_id=' . $payment->id;
+                
+                // Verificar se tem ticket_url na resposta principal ou nas transações
+                $ticketUrl = $data['ticket_url'] ?? 
+                            $data['transactions']['payments'][0]['payment_method']['ticket_url'] ?? 
+                            null;
+                
+                if ($ticketUrl) {
+                    return $ticketUrl;
+                }
+                
+                throw new \Exception('ticket_url não encontrado na resposta: ' . json_encode($data));
             }
             
-            throw new \Exception('Erro na API do Mercado Pago: ' . $response->body());
+            throw new \Exception('Erro na API do Mercado Pago: ' . $response->status() . ' - ' . $response->body());
             
         } catch (\Exception $e) {
+            \Log::error('Erro ao criar boleto no Mercado Pago', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage()
+            ]);
+            
             // Fallback para link de geração
             return config('app.url') . '/api/boleto/generate-second-via?payment_id=' . $payment->id;
         }
@@ -211,6 +243,16 @@ class MercadoPagoPaymentController extends Controller
     protected function generatePixLink(Payment $payment, string $accessToken): string
     {
         try {
+            $payerData = [
+                'email' => $payment->matricula->email ?? 'teste@exemplo.com',
+                'first_name' => explode(' ', $payment->matricula->nome_completo ?? 'Nome')[0],
+                'last_name' => explode(' ', $payment->matricula->nome_completo ?? 'Sobrenome')[1] ?? 'Sobrenome',
+                'identification' => [
+                    'type' => 'CPF',
+                    'number' => preg_replace('/[^0-9]/', '', $payment->matricula->cpf ?? '11111111111')
+                ]
+            ];
+
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $accessToken,
                 'Content-Type' => 'application/json',
@@ -219,27 +261,18 @@ class MercadoPagoPaymentController extends Controller
                 'type' => 'online',
                 'processing_mode' => 'automatic',
                 'external_reference' => 'payment_' . $payment->id,
-                'total_amount' => $payment->valor * 100,
-                'description' => $payment->descricao,
-                'payer' => [
-                    'email' => $payment->matricula->email,
-                    'first_name' => explode(' ', $payment->matricula->nome_completo)[0] ?? '',
-                    'last_name' => explode(' ', $payment->matricula->nome_completo)[1] ?? '',
-                    'identification' => [
-                        'type' => 'CPF',
-                        'number' => $payment->matricula->cpf ?? '00000000000'
-                    ]
-                ],
+                'total_amount' => (string) $payment->valor, // API v1/orders usa valor direto, não centavos
+                'description' => $payment->descricao ?? 'Pagamento de matrícula',
+                'payer' => $payerData,
                 'transactions' => [
-                    [
-                        'payments' => [
-                            [
-                                'payment_method' => [
-                                    'id' => 'pix',
-                                    'type' => 'bank_transfer'
-                                ],
-                                'expiration_time' => 'P1D' // 1 dia
-                            ]
+                    'payments' => [
+                        [
+                            'amount' => (string) $payment->valor,
+                            'payment_method' => [
+                                'id' => 'pix',
+                                'type' => 'bank_transfer'
+                            ],
+                            'expiration_time' => 'P1D' // 1 dia para vencimento
                         ]
                     ]
                 ]
@@ -247,12 +280,27 @@ class MercadoPagoPaymentController extends Controller
             
             if ($response->successful()) {
                 $data = $response->json();
-                return $data['ticket_url'] ?? config('app.url') . '/api/payment/generate-pix?payment_id=' . $payment->id;
+                
+                // Para PIX, verificar ticket_url ou qr_code
+                $ticketUrl = $data['ticket_url'] ?? 
+                            $data['transactions']['payments'][0]['payment_method']['ticket_url'] ?? 
+                            null;
+                
+                if ($ticketUrl) {
+                    return $ticketUrl;
+                }
+                
+                throw new \Exception('ticket_url não encontrado na resposta PIX: ' . json_encode($data));
             }
             
-            throw new \Exception('Erro na API do Mercado Pago: ' . $response->body());
+            throw new \Exception('Erro na API do Mercado Pago PIX: ' . $response->status() . ' - ' . $response->body());
             
         } catch (\Exception $e) {
+            \Log::error('Erro ao criar PIX no Mercado Pago', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage()
+            ]);
+            
             return config('app.url') . '/api/payment/generate-pix?payment_id=' . $payment->id;
         }
     }
@@ -270,32 +318,46 @@ class MercadoPagoPaymentController extends Controller
             ])->post('https://api.mercadopago.com/checkout/preferences', [
                 'items' => [
                     [
-                        'title' => $payment->descricao,
+                        'title' => 'Pagamento do Curso - ' . ($payment->matricula->inscricao->curso->nome ?? 'Curso'),
                         'quantity' => 1,
-                        'unit_price' => $payment->valor
+                        'unit_price' => (float) $payment->matricula->valor_total_curso // Usar valor total do curso
                     ]
                 ],
                 'payer' => [
-                    'email' => $payment->matricula->email,
-                    'name' => $payment->matricula->nome_completo
+                    'email' => $payment->matricula->email ?? 'teste@exemplo.com',
+                    'name' => $payment->matricula->nome_completo ?? 'Nome Completo',
+                    'identification' => [
+                        'type' => 'CPF',
+                        'number' => preg_replace('/[^0-9]/', '', $payment->matricula->cpf ?? '11111111111')
+                    ]
                 ],
                 'external_reference' => 'payment_' . $payment->id,
-                'notification_url' => config('app.url') . '/api/webhooks/mercadopago',
+                'notification_url' => route('webhook.mercadopago'),
                 'back_urls' => [
-                    'success' => config('app.url') . '/payment/success',
-                    'failure' => config('app.url') . '/payment/failure',
-                    'pending' => config('app.url') . '/payment/pending'
+                    'success' => config('app.url') . '/payment/success?payment_id=' . $payment->id,
+                    'failure' => config('app.url') . '/payment/failure?payment_id=' . $payment->id,
+                    'pending' => config('app.url') . '/payment/pending?payment_id=' . $payment->id
                 ]
             ]);
             
             if ($response->successful()) {
                 $data = $response->json();
-                return $data['init_point'] ?? config('app.url') . '/payment/checkout/' . $payment->id;
+                
+                if (isset($data['init_point'])) {
+                    return $data['init_point'];
+                }
+                
+                throw new \Exception('init_point não encontrado na resposta: ' . json_encode($data));
             }
             
-            throw new \Exception('Erro na API do Mercado Pago: ' . $response->body());
+            throw new \Exception('Erro na API do Mercado Pago (Cartão): ' . $response->status() . ' - ' . $response->body());
             
         } catch (\Exception $e) {
+            \Log::error('Erro ao criar preferência de cartão no Mercado Pago', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage()
+            ]);
+            
             return config('app.url') . '/payment/checkout/' . $payment->id;
         }
     }
