@@ -227,7 +227,7 @@ class BoletoSecondViaService
                 'barcode_content' => $payment['barcode_content'] ?? null,
                 'financial_institution' => $payment['financial_institution'] ?? null,
                 'expires_at' => isset($payment['expiration_time']) 
-                    ? Carbon::parse($payment['expiration_time']) 
+                    ? $this->parseExpirationTime($payment['expiration_time']) 
                     : null,
                 'order_id' => $response['id'] ?? null,
                 'payment_id' => $payment['id'] ?? null
@@ -330,5 +330,33 @@ class BoletoSecondViaService
             'cancelled_vias' => $cancelledVias,
             'success_rate' => $totalVias > 0 ? round(($paidVias / $totalVias) * 100, 2) : 0
         ];
+    }
+
+    /**
+     * Parse expiration time from Mercado Pago response
+     * Handles both ISO 8601 duration strings (P3D) and datetime strings
+     */
+    private function parseExpirationTime($expirationTime)
+    {
+        try {
+            // Check if it's an ISO 8601 duration string (starts with P)
+            if (is_string($expirationTime) && str_starts_with($expirationTime, 'P')) {
+                // Convert duration string to actual expiration date
+                $interval = new \DateInterval($expirationTime);
+                return now()->add($interval);
+            }
+            
+            // Try to parse as a regular datetime string
+            return Carbon::parse($expirationTime);
+            
+        } catch (\Exception $e) {
+            // Log the error and return a default expiration (3 days from now)
+            \Log::warning('Failed to parse expiration_time from Mercado Pago', [
+                'expiration_time' => $expirationTime,
+                'error' => $e->getMessage()
+            ]);
+            
+            return now()->addDays(3);
+        }
     }
 }
