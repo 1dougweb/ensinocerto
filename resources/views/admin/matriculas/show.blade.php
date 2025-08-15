@@ -322,7 +322,7 @@
                                                 $payment = $matricula->payments->where('numero_parcela', $i)->first();
                                                 $dueDate = null;
                                                 if ($matricula->dia_vencimento) {
-                                                    $dueDate = \Carbon\Carbon::now()->startOfMonth()->addMonths($i - 1)->setDay($matricula->dia_vencimento);
+                                                    $dueDate = \Carbon\Carbon::now()->startOfMonth()->addMonths($i - 1)->setDay((int) $matricula->dia_vencimento);
                                                     // Se a data já passou, vamos para o próximo mês
                                                     if ($dueDate->isPast()) {
                                                         $dueDate = $dueDate->addMonths(1);
