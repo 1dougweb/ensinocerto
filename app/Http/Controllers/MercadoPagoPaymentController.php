@@ -340,7 +340,7 @@ class MercadoPagoPaymentController extends Controller
                 ],
                 'payment_methods' => [
                     'installments' => 12, // Máximo de 12 parcelas
-                    'default_installments' => 1, // Padrão: 1 parcela (à vista)
+                    'default_installments' => 12, // Padrão: 1 parcela (à vista)
                     'installments_cost' => 0, // Custo de juros zero para o comprador
                     'excluded_payment_methods' => [],
                     'excluded_payment_types' => []
