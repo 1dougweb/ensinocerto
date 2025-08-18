@@ -395,13 +395,33 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!confirm('Tem certeza que deseja deletar a instância? Esta ação não pode ser desfeita.')) return;
         
         await executeAction(this, async () => {
-            const response = await fetch(routes.deleteInstance, {
-                method: 'DELETE',
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            // Criar um controller para abortar a requisição se necessário
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutos
+            
+            try {
+                const response = await fetch(routes.deleteInstance, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-            });
-            return await response.json();
+                
+                return await response.json();
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    throw new Error('Timeout: A operação demorou mais que o esperado (2 minutos).');
+                }
+                throw error;
+            }
         }, 'Instância deletada com sucesso!');
     });
 
