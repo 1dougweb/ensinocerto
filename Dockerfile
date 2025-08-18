@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     sqlite3 \
     libsqlite3-dev \
-    && docker-php-ext-install pdo_sqlite mbstring exif pcntl bcmath gd \
+    && docker-php-ext-install pdo_mysql pdo_sqlite mysqli mbstring exif pcntl bcmath gd \
     && a2enmod rewrite \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
