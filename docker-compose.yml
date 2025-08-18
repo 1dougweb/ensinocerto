@@ -21,10 +21,10 @@ services:
   db:
     image: mariadb:10.11
     environment:
-      - MYSQL_ROOT_PASSWORD=root_senha_segura
-      - MYSQL_DATABASE=ensino_certo
-      - MYSQL_USER=ensino_certo_user
-      - MYSQL_PASSWORD=senha_segura
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root_senha_segura}
+      - MYSQL_DATABASE=${DB_DATABASE:-ensino_certo}
+      - MYSQL_USER=${DB_USERNAME:-ensino_certo_user}
+      - MYSQL_PASSWORD=${DB_PASSWORD:-senha_segura}
     volumes:
       - db_data:/var/lib/mysql
       - ./database/dump.sql:/docker-entrypoint-initdb.d/dump.sql:ro
@@ -37,7 +37,11 @@ services:
     environment:
       - PMA_HOST=db
       - PMA_USER=root
-      - PMA_PASSWORD=root_senha_segura
+      - PMA_PASSWORD=${MYSQL_ROOT_PASSWORD:-root_senha_segura}
+      - PMA_ARBITRARY=1
+      - UPLOAD_LIMIT=512M
+    volumes:
+      - ./phpmyadmin-config.php:/etc/phpmyadmin/config.user.inc.php:ro
     ports:
       - "8080:80"
     depends_on:
