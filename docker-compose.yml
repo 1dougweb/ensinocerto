@@ -17,8 +17,8 @@ services:
       - CACHE_DRIVER=file
       - SESSION_DRIVER=file
       - QUEUE_CONNECTION=sync
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     depends_on:
       db:
         condition: service_healthy
@@ -40,8 +40,8 @@ services:
     volumes:
       - db_data:/var/lib/mysql
       - ./database/dump.sql:/docker-entrypoint-initdb.d/dump.sql:ro
-    ports:
-      - "3306:3306"
+    expose:
+      - "3306"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -60,16 +60,16 @@ services:
       - UPLOAD_LIMIT=512M
     volumes:
       - ./phpmyadmin-config.php:/etc/phpmyadmin/config.user.inc.php:ro
-    ports:
-      - "8080:80"
+    expose:
+      - "80"
     depends_on:
       - db
     restart: unless-stopped
 
   adminer:
     image: adminer:latest
-    ports:
-      - "8081:8080"
+    expose:
+      - "8080"
     depends_on:
       - db
     restart: unless-stopped
