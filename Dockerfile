@@ -1,55 +1,48 @@
-FROM php:8.2-apache
+# ==============================
+# Etapa 1 - Base do PHP + Extensões
+# ==============================
+FROM php:8.2-fpm AS base
 
-# Install PHP extensions and system dependencies
+# Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip \
     git \
+    unzip \
     curl \
-    sqlite3 \
-    libsqlite3-dev \
-    netcat-traditional \
-    && docker-php-ext-install pdo_mysql pdo_sqlite mysqli mbstring exif pcntl bcmath gd \
-    && a2enmod rewrite \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libzip-dev \
+    zip \
+    nano \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo_mysql gd zip bcmath
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Instalar Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Set working directory
+# ==============================
+# Etapa 2 - Instalar Node.js
+# ==============================
+FROM base AS with-node
+
+# Instalar Node.js (LTS)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g pnpm yarn
+
+# ==============================
+# Etapa 3 - Configuração final
+# ==============================
 WORKDIR /var/www/html
 
-# Copy application files
+# Copiar o código do Laravel
 COPY . .
 
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader
+# Permissões para o storage e bootstrap/cache
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 storage bootstrap/cache
+# Expor porta do PHP-FPM
+EXPOSE 9000
 
-# Apache configuration
-RUN echo '<VirtualHost *:80>\n\
-    ServerName localhost\n\
-    DocumentRoot /var/www/html/public\n\
-    <Directory /var/www/html/public>\n\
-        AllowOverride All\n\
-        Require all granted\n\
-    </Directory>\n\
-</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
-
-# Set global ServerName to suppress warnings
-RUN echo 'ServerName localhost' >> /etc/apache2/apache2.conf
-
-# Copy entrypoint script
-COPY entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
-EXPOSE 80
-
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+# Comando padrão
+CMD ["php-fpm"]
