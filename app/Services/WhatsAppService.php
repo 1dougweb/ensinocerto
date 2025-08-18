@@ -177,9 +177,19 @@ class WhatsAppService
 
             if (!$response->successful()) {
                 $errorBody = $response->body();
+                $statusCode = $response->status();
+                
+                Log::warning('Resposta não bem-sucedida ao criar instância', [
+                    'status' => $statusCode,
+                    'body' => $errorBody,
+                    'headers' => $response->headers()
+                ]);
                 
                 // Verificar se é erro de nome duplicado
-                if (str_contains($errorBody, 'already in use') || str_contains($errorBody, 'já existe') || $response->status() === 409) {
+                if (str_contains($errorBody, 'already in use') || 
+                    str_contains($errorBody, 'já existe') || 
+                    str_contains($errorBody, 'Instance already exists') ||
+                    $statusCode === 409) {
                     Log::info('Instância já existe (detectado no erro), continuando...');
                     
                     return [
@@ -191,12 +201,28 @@ class WhatsAppService
                     ];
                 }
                 
-                Log::error('Erro ao criar instância', [
-                    'status' => $response->status(),
-                    'body' => $errorBody
+                // Verificar erros específicos da Evolution API
+                $errorMessage = "Erro HTTP {$statusCode}";
+                if ($statusCode === 401) {
+                    $errorMessage = 'API Key inválida ou expirada. Verifique suas credenciais.';
+                } elseif ($statusCode === 403) {
+                    $errorMessage = 'Acesso negado. Verifique as permissões da API Key.';
+                } elseif ($statusCode === 404) {
+                    $errorMessage = 'Endpoint não encontrado. Verifique a URL da API.';
+                } elseif ($statusCode >= 500) {
+                    $errorMessage = 'Erro interno do servidor Evolution API. Tente novamente em alguns minutos.';
+                } else {
+                    $errorMessage = "Erro {$statusCode}: {$errorBody}";
+                }
+                
+                Log::error('Erro ao criar instância - detalhado', [
+                    'status' => $statusCode,
+                    'body' => $errorBody,
+                    'instance' => $this->instance,
+                    'base_url' => $this->baseUrl
                 ]);
                 
-                throw new \Exception('Erro ao criar instância: ' . $response->status() . ' - ' . $errorBody);
+                throw new \Exception($errorMessage);
             }
 
             $data = $response->json();
@@ -282,7 +308,14 @@ class WhatsAppService
             }
 
             // Tentar obter QR Code
-            $response = Http::timeout(30)
+            Log::info('Solicitando QR Code', [
+                'instance' => $this->instance,
+                'url' => "{$this->baseUrl}/instance/connect/{$this->instance}"
+            ]);
+            
+            $response = Http::timeout(60) // Aumentar timeout para QR Code
+                ->connectTimeout(15)
+                ->retry(2, 2000) // 2 tentativas com 2 segundos entre elas
                 ->withHeaders([
                     'apikey' => $this->apiKey
                 ])
@@ -304,7 +337,8 @@ class WhatsAppService
                     // Aguardar um pouco e tentar novamente
                     sleep(2);
                     
-                    $response = Http::timeout(30)
+                    $response = Http::timeout(60)
+                        ->connectTimeout(15)
                         ->withHeaders([
                             'apikey' => $this->apiKey
                         ])
@@ -313,7 +347,27 @@ class WhatsAppService
             }
 
             if (!$response->successful()) {
-                throw new \Exception('Erro ao obter QR Code: ' . $response->body());
+                $statusCode = $response->status();
+                $errorBody = $response->body();
+                
+                Log::error('Erro ao obter QR Code', [
+                    'status' => $statusCode,
+                    'body' => $errorBody,
+                    'instance' => $this->instance
+                ]);
+                
+                $errorMessage = "Erro ao obter QR Code";
+                if ($statusCode === 401) {
+                    $errorMessage = 'API Key inválida. Verifique suas credenciais.';
+                } elseif ($statusCode === 404) {
+                    $errorMessage = 'Instância não encontrada. Crie uma nova instância.';
+                } elseif ($statusCode >= 500) {
+                    $errorMessage = 'Servidor Evolution API indisponível. Tente novamente em alguns minutos.';
+                } else {
+                    $errorMessage = "Erro {$statusCode}: {$errorBody}";
+                }
+                
+                throw new \Exception($errorMessage);
             }
 
             $data = $response->json();
@@ -429,7 +483,8 @@ class WhatsAppService
         }
 
         try {
-            $response = Http::timeout(30)
+            $response = Http::timeout(10) // Reduzir timeout para 10 segundos
+                ->connectTimeout(5) // Timeout de conexão rápido
                 ->withHeaders([
                     'apikey' => $this->apiKey
                 ])
@@ -1114,7 +1169,8 @@ class WhatsAppService
         }
 
         try {
-            $response = Http::timeout(30)
+            $response = Http::timeout(10) // Reduzir timeout para 10 segundos
+                ->connectTimeout(5) // Timeout de conexão rápido
                 ->withHeaders([
                     'apikey' => $this->apiKey
                 ])

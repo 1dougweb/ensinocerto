@@ -238,6 +238,13 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Cache para evitar chamadas repetidas
+    let statusCache = {
+        data: null,
+        timestamp: 0,
+        duration: 30000 // Cache por 30 segundos
+    };
+    
     // Elementos DOM
     const qrcodeContainer = document.getElementById('qrcode-container');
     const statusMessage = document.getElementById('status-message');
@@ -392,8 +399,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Atualizar status
-    btnRefreshStatus.addEventListener('click', refreshStatus);
+    // Atualizar status (forçar refresh)
+    if (btnRefreshStatus) {
+        btnRefreshStatus.addEventListener('click', () => refreshStatus(true));
+    }
 
     // Desconectar
     btnDisconnect.addEventListener('click', async function() {
@@ -507,62 +516,122 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Atualizar status da conexão
-    async function refreshStatus() {
-        try {
-            // Primeiro buscar o status
-            const statusResponse = await fetch(routes.status);
-            const statusData = await statusResponse.json();
+    // Processar dados de status (separado para reutilização)
+    async function processStatusData(statusData) {
+        if (statusData.success) {
+            const status = statusData.data || {};
             
-            if (statusData.success) {
-                const status = statusData.data || {};
-                
-                // Atualizar badge
+            // Atualizar badge
+            if (connectionBadge) {
                 connectionBadge.innerHTML = status.connected 
                     ? '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Conectado</span>'
                     : '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Desconectado</span>';
-                
-                // Atualizar mensagem
+            }
+            
+            // Atualizar mensagem
+            if (statusMessage) {
                 statusMessage.className = `alert ${status.connected ? 'alert-success' : 'alert-info'} mb-3`;
                 statusMessage.innerHTML = `<i class="fas fa-info-circle me-2"></i>${status.message || 'Status desconhecido'}`;
-                
-                // Buscar se instância existe (não crítico se falhar)
-                let instanceExists = true; // assumir que existe por padrão
-                try {
-                    const instanceResponse = await fetch('{{ route("admin.settings.whatsapp.check-instance") }}');
-                    const instanceData = await instanceResponse.json();
-                    if (instanceData.success && instanceData.data) {
-                        instanceExists = instanceData.data.exists || false;
-                    }
-                } catch (e) {
-                    console.warn('Erro ao verificar instância:', e);
-                }
-                
-                // Atualizar visibilidade dos botões
-                updateButtonVisibility(instanceExists, status.connected);
-                
-                // Atualizar botão de envio de teste
-                const testSubmitBtn = document.querySelector('#test-message-form button[type="submit"]');
-                if (testSubmitBtn) {
-                    testSubmitBtn.disabled = !status.connected;
-                }
-                
-                // Limpar QR code se conectado
-                if (status.connected && qrcodeContainer.querySelector('.qr-code-display')) {
-                    qrcodeContainer.innerHTML = `
-                        <div class="alert alert-success">
-                            <i class="fas fa-check-circle me-2"></i>
-                            Dispositivo conectado com sucesso!
-                        </div>
-                    `;
-                }
-            } else {
-                console.warn('Status request failed:', statusData);
-                // Em caso de erro, usar valores padrão
-                updateButtonVisibility(true, false);
             }
+            
+            // Buscar se instância existe (com cache próprio)
+            let instanceExists = true;
+            try {
+                const instanceResponse = await fetch('{{ route("admin.settings.whatsapp.check-instance") }}');
+                const instanceData = await instanceResponse.json();
+                if (instanceData.success && instanceData.data) {
+                    instanceExists = instanceData.data.exists || false;
+                }
+            } catch (e) {
+                console.warn('Erro ao verificar instância:', e);
+            }
+            
+            // Atualizar visibilidade dos botões
+            updateButtonVisibility(instanceExists, status.connected);
+            
+            // Atualizar botão de envio de teste
+            const testSubmitBtn = document.querySelector('#test-message-form button[type="submit"]');
+            if (testSubmitBtn) {
+                testSubmitBtn.disabled = !status.connected;
+            }
+            
+            // Limpar QR code se conectado
+            if (status.connected && qrcodeContainer && qrcodeContainer.querySelector('.qr-code-display')) {
+                qrcodeContainer.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        Dispositivo conectado com sucesso!
+                    </div>
+                `;
+            }
+        } else {
+            console.warn('Status request failed:', statusData);
+            updateButtonVisibility(true, false);
+        }
+    }
+
+    // Atualizar status da conexão
+    async function refreshStatus(forceRefresh = false) {
+        try {
+            // Verificar cache se não for forçado
+            if (!forceRefresh && statusCache.data && 
+                (Date.now() - statusCache.timestamp) < statusCache.duration) {
+                console.log('Usando cache para status');
+                processStatusData(statusCache.data);
+                return;
+            }
+            
+            // Mostrar indicador de carregamento apenas se não há cache
+            if (!statusCache.data) {
+                if (statusMessage) {
+                    statusMessage.className = 'alert alert-info mb-3';
+                    statusMessage.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verificando status...';
+                }
+                
+                if (connectionBadge) {
+                    connectionBadge.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-spinner fa-spin me-1"></i>Carregando...</span>';
+                }
+            }
+            
+            // Buscar o status com timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 segundos
+            
+            const statusResponse = await fetch(routes.status, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            const statusData = await statusResponse.json();
+            
+            // Atualizar cache
+            statusCache = {
+                data: statusData,
+                timestamp: Date.now(),
+                duration: 30000
+            };
+            
+            processStatusData(statusData);
         } catch (error) {
             console.error('Erro ao atualizar status:', error);
+            
+            // Mostrar erro no status
+            if (statusMessage) {
+                let errorMsg = 'Erro ao verificar status';
+                if (error.name === 'AbortError') {
+                    errorMsg = 'Timeout: A verificação demorou mais que o esperado';
+                } else if (error.message) {
+                    errorMsg = 'Erro: ' + error.message;
+                }
+                
+                statusMessage.className = 'alert alert-warning mb-3';
+                statusMessage.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${errorMsg}`;
+            }
+            
+            if (connectionBadge) {
+                connectionBadge.innerHTML = '<span class="badge bg-warning"><i class="fas fa-exclamation-triangle me-1"></i>Erro</span>';
+            }
+            
             // Em caso de erro, usar valores padrão
             updateButtonVisibility(true, false);
         }
@@ -587,11 +656,28 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Verificar estado inicial
-    refreshStatus();
-
-    // Auto-refresh do status a cada 30 segundos
-    setInterval(refreshStatus, 30000);
+    // Verificar se deve carregar status automaticamente
+    const hasBasicConfig = {{ $hasBasicConfig ? 'true' : 'false' }};
+    
+    if (hasBasicConfig) {
+        // Aguardar um pouco antes do primeiro refresh para não bloquear a página
+        setTimeout(refreshStatus, 1000);
+        
+        // Auto-refresh do status a cada 45 segundos (menos frequente)
+        setInterval(refreshStatus, 45000);
+    } else {
+        // Se não tem configuração básica, apenas atualizar visibilidade dos botões
+        updateButtonVisibility(false, false);
+        
+        if (statusMessage) {
+            statusMessage.className = 'alert alert-info mb-3';
+            statusMessage.innerHTML = '<i class="fas fa-info-circle me-2"></i>Configure a URL da API, chave de acesso e nome da instância para começar';
+        }
+        
+        if (connectionBadge) {
+            connectionBadge.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-cog me-1"></i>Não configurado</span>';
+        }
+    }
 });
 </script>
 @endpush

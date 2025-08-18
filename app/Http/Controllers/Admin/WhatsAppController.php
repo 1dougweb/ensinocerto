@@ -32,20 +32,28 @@ class WhatsAppController extends Controller
             'last_connection' => SystemSetting::get('evolution_api_last_connection', '')
         ];
         
-        // Verificar se instância existe
+        // Estados iniciais - será carregado via AJAX
         $instanceExists = false;
-        $connectionStatus = ['connected' => false, 'message' => 'Configurações incompletas'];
+        $connectionStatus = [
+            'connected' => false, 
+            'message' => 'Carregando...', 
+            'loading' => true
+        ];
         
-        if (!empty($settings['base_url']) && !empty($settings['api_key']) && !empty($settings['instance'])) {
-            try {
-                $instanceExists = $this->whatsappService->instanceExists();
-                $connectionStatus = $this->whatsappService->getConnectionStatus();
-            } catch (\Exception $e) {
-                $connectionStatus = ['connected' => false, 'message' => 'Erro de conexão'];
-            }
+        // Verificar apenas se as configurações básicas estão presentes
+        $hasBasicConfig = !empty($settings['base_url']) && 
+                         !empty($settings['api_key']) && 
+                         !empty($settings['instance']);
+        
+        if (!$hasBasicConfig) {
+            $connectionStatus = [
+                'connected' => false, 
+                'message' => 'Configure a URL da API, chave de acesso e nome da instância',
+                'loading' => false
+            ];
         }
         
-        return view('admin.settings.whatsapp', compact('settings', 'connectionStatus', 'instanceExists'));
+        return view('admin.settings.whatsapp', compact('settings', 'connectionStatus', 'instanceExists', 'hasBasicConfig'));
     }
 
     /**
@@ -149,20 +157,44 @@ class WhatsAppController extends Controller
     public function createInstance()
     {
         try {
+            Log::info('Iniciando criação de instância WhatsApp');
+            
             $result = $this->whatsappService->createInstance();
+            
+            Log::info('Instância WhatsApp criada com sucesso', [
+                'result' => $result
+            ]);
             
             return response()->json([
                 'success' => true,
-                'message' => 'Instância criada com sucesso!',
+                'message' => $result['message'] ?? 'Instância criada com sucesso!',
                 'data' => $result
             ]);
+            
         } catch (\Exception $e) {
-            Log::error('Erro ao criar instância WhatsApp: ' . $e->getMessage());
+            Log::error('Erro ao criar instância WhatsApp', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            // Determinar o código de erro baseado no tipo
+            $statusCode = 500;
+            $errorMessage = $e->getMessage();
+            
+            if (str_contains($errorMessage, 'timeout') || str_contains($errorMessage, 'Timeout')) {
+                $statusCode = 408; // Request Timeout
+            } elseif (str_contains($errorMessage, 'conexão') || str_contains($errorMessage, 'Connection')) {
+                $statusCode = 503; // Service Unavailable
+            }
             
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
-            ], 500);
+                'error' => $errorMessage,
+                'code' => $statusCode,
+                'timestamp' => now()->toISOString()
+            ], $statusCode);
         }
     }
 
