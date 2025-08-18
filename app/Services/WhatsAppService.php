@@ -957,17 +957,57 @@ class WhatsAppService
         }
 
         try {
-            $response = Http::timeout(30)
+            Log::info('Tentando deletar instância WhatsApp', [
+                'base_url' => $this->baseUrl,
+                'instance' => $this->instance,
+                'full_url' => "{$this->baseUrl}/instance/delete/{$this->instance}"
+            ]);
+
+            $response = Http::timeout(60) // Aumentar timeout para 60 segundos
+                ->connectTimeout(15) // Timeout de conexão
+                ->retry(3, 2000) // Tentar 3 vezes com 2 segundos entre tentativas
                 ->withHeaders([
-                    'apikey' => $this->apiKey
+                    'apikey' => $this->apiKey,
+                    'Content-Type' => 'application/json'
                 ])
                 ->delete("{$this->baseUrl}/instance/delete/{$this->instance}");
 
+            if (!$response->successful()) {
+                $errorMsg = "Erro HTTP {$response->status()}: " . $response->body();
+                Log::error('Erro na resposta ao deletar instância', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+                throw new \Exception($errorMsg);
+            }
+
             $this->updateConnectionStatus(false);
             
+            Log::info('Instância WhatsApp deletada com sucesso');
             return $response->json();
+            
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            $errorMsg = 'Erro de conexão: Não foi possível conectar ao servidor da Evolution API. Verifique se o servidor está online.';
+            Log::error('Erro de conexão ao deletar instância WhatsApp', [
+                'error' => $e->getMessage(),
+                'base_url' => $this->baseUrl
+            ]);
+            throw new \Exception($errorMsg);
+            
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            $errorMsg = 'Timeout: A operação demorou mais que o esperado. Tente novamente em alguns minutos.';
+            Log::error('Timeout ao deletar instância WhatsApp', [
+                'error' => $e->getMessage(),
+                'instance' => $this->instance
+            ]);
+            throw new \Exception($errorMsg);
+            
         } catch (\Exception $e) {
-            Log::error('Erro ao deletar instância WhatsApp: ' . $e->getMessage());
+            Log::error('Erro geral ao deletar instância WhatsApp', [
+                'error' => $e->getMessage(),
+                'instance' => $this->instance,
+                'base_url' => $this->baseUrl
+            ]);
             throw $e;
         }
     }

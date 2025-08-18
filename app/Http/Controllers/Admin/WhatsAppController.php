@@ -224,13 +224,29 @@ class WhatsAppController extends Controller
                 'message' => 'Instância deletada com sucesso!',
                 'data' => $result
             ]);
+            
         } catch (\Exception $e) {
-            Log::error('Erro ao deletar instância WhatsApp: ' . $e->getMessage());
+            Log::error('Erro ao deletar instância WhatsApp', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Determinar o código de erro baseado no tipo de exceção
+            $statusCode = 500;
+            $errorMessage = $e->getMessage();
+            
+            // Se for erro de timeout ou conexão, usar código mais específico
+            if (str_contains($errorMessage, 'timeout') || str_contains($errorMessage, 'Timeout')) {
+                $statusCode = 408; // Request Timeout
+            } elseif (str_contains($errorMessage, 'conexão') || str_contains($errorMessage, 'Connection')) {
+                $statusCode = 503; // Service Unavailable
+            }
             
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
-            ], 500);
+                'error' => $errorMessage,
+                'code' => $statusCode
+            ], $statusCode);
         }
     }
 

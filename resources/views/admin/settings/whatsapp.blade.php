@@ -447,7 +447,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Erro:', error);
-            toastr.error('Erro: ' + error.message);
+            
+            // Tratamento específico para diferentes tipos de erro
+            let errorMessage = 'Erro: ' + error.message;
+            
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                errorMessage = 'Erro de conexão: Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
+            } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+                errorMessage = 'Timeout: A operação demorou mais que o esperado. Tente novamente em alguns minutos.';
+            } else if (error.message.includes('Connection') || error.message.includes('conexão')) {
+                errorMessage = 'Erro de conexão: Não foi possível conectar ao servidor da Evolution API.';
+            }
+            
+            toastr.error(errorMessage);
         } finally {
             button.disabled = false;
             // Restaurar texto original imediatamente
