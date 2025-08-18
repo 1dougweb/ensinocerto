@@ -286,14 +286,34 @@ document.addEventListener('DOMContentLoaded', function() {
     // Criar instância
     btnCreateInstance.addEventListener('click', async function() {
         await executeAction(this, async () => {
-            const response = await fetch(routes.createInstance, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                    'Content-Type': 'application/json'
+            // Criar um controller para abortar a requisição se necessário
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutos para criar instância
+            
+            try {
+                const response = await fetch(routes.createInstance, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Content-Type': 'application/json'
+                    },
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-            });
-            return await response.json();
+                
+                return await response.json();
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    throw new Error('Timeout: A criação da instância demorou mais que o esperado (3 minutos). Tente novamente.');
+                }
+                throw error;
+            }
         }, 'Instância criada com sucesso!');
     });
 

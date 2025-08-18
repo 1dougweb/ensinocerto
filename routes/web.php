@@ -437,6 +437,7 @@ Route::middleware(['auth', 'theme', \App\Http\Middleware\CheckMenuPermission::cl
             Route::post('/whatsapp/disconnect', [WhatsAppController::class, 'disconnect'])->name('admin.settings.whatsapp.disconnect');
             Route::post('/whatsapp/reconnect', [WhatsAppController::class, 'reconnect'])->name('admin.settings.whatsapp.reconnect');
             Route::delete('/whatsapp/delete-instance', [WhatsAppController::class, 'deleteInstance'])->name('admin.settings.whatsapp.delete-instance');
+            Route::get('/whatsapp/diagnostic', [WhatsAppController::class, 'diagnostic'])->name('admin.settings.whatsapp.diagnostic');
             Route::post('/whatsapp/test-message', [WhatsAppController::class, 'testMessage'])->name('admin.settings.whatsapp.test-message');
             Route::post('/whatsapp/monitor', [WhatsAppController::class, 'monitor'])->name('admin.settings.whatsapp.monitor');
             

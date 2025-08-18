@@ -251,6 +251,30 @@ class WhatsAppController extends Controller
     }
 
     /**
+     * Diagnóstico de conectividade
+     */
+    public function diagnostic()
+    {
+        try {
+            $result = $this->whatsappService->diagnosticConnectivity();
+            
+            return response()->json($result);
+            
+        } catch (\Exception $e) {
+            Log::error('Erro no diagnóstico WhatsApp', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Erro ao executar diagnóstico: ' . $e->getMessage(),
+                'tests' => []
+            ], 500);
+        }
+    }
+
+    /**
      * Testar envio de mensagem
      */
     public function testMessage(Request $request)

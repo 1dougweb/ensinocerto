@@ -136,10 +136,30 @@ class WhatsAppService
                 ];
             }
 
-            Log::info('Criando nova instância WhatsApp', ['instance' => $this->instance]);
+            Log::info('Criando nova instância WhatsApp', [
+                'instance' => $this->instance,
+                'base_url' => $this->baseUrl,
+                'full_url' => "{$this->baseUrl}/instance/create"
+            ]);
+
+            // Testar conectividade primeiro
+            try {
+                $pingResponse = Http::timeout(10)->get($this->baseUrl . '/manager/fetchInstances');
+                if (!$pingResponse->successful()) {
+                    Log::warning('Servidor Evolution API não está respondendo adequadamente', [
+                        'status' => $pingResponse->status()
+                    ]);
+                }
+            } catch (\Exception $pingError) {
+                Log::warning('Problema de conectividade detectado antes da criação', [
+                    'error' => $pingError->getMessage()
+                ]);
+            }
 
             // Criar nova instância
-            $response = Http::timeout(30)
+            $response = Http::timeout(90) // Aumentar timeout para 90 segundos
+                ->connectTimeout(20) // Timeout de conexão
+                ->retry(3, 3000) // Tentar 3 vezes com 3 segundos entre tentativas
                 ->withHeaders([
                     'apikey' => $this->apiKey,
                     'Content-Type' => 'application/json'
@@ -186,8 +206,56 @@ class WhatsAppService
             sleep(2);
             
             return $data;
+            
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            $errorMsg = 'Erro de conexão: Não foi possível conectar ao servidor da Evolution API. Verifique se o servidor está online.';
+            Log::error('Erro de conexão ao criar instância WhatsApp', [
+                'error' => $e->getMessage(),
+                'base_url' => $this->baseUrl,
+                'instance' => $this->instance
+            ]);
+            throw new \Exception($errorMsg);
+            
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            // Em caso de timeout, verificar se a instância foi criada mesmo assim
+            Log::warning('Timeout detectado, verificando se instância foi criada...', [
+                'error' => $e->getMessage(),
+                'instance' => $this->instance
+            ]);
+            
+            // Aguardar um pouco e verificar se a instância foi criada
+            sleep(5);
+            
+            try {
+                if ($this->instanceExists()) {
+                    Log::info('Instância foi criada apesar do timeout');
+                    return [
+                        'instance' => [
+                            'instanceName' => $this->instance,
+                            'status' => 'created_after_timeout'
+                        ],
+                        'message' => 'Instância criada com sucesso (verificação após timeout)'
+                    ];
+                }
+            } catch (\Exception $verifyError) {
+                Log::warning('Erro ao verificar instância após timeout: ' . $verifyError->getMessage());
+            }
+            
+            $errorMsg = 'Timeout: A criação da instância demorou mais que o esperado. A instância pode ter sido criada. Verifique o status na página.';
+            Log::error('Timeout confirmado ao criar instância WhatsApp', [
+                'error' => $e->getMessage(),
+                'instance' => $this->instance,
+                'base_url' => $this->baseUrl
+            ]);
+            throw new \Exception($errorMsg);
+            
         } catch (\Exception $e) {
-            Log::error('Erro ao criar instância WhatsApp: ' . $e->getMessage());
+            Log::error('Erro geral ao criar instância WhatsApp', [
+                'error' => $e->getMessage(),
+                'instance' => $this->instance,
+                'base_url' => $this->baseUrl,
+                'trace' => $e->getTraceAsString()
+            ]);
             throw $e;
         }
     }
@@ -1116,6 +1184,160 @@ class WhatsAppService
             Log::error('Erro ao fazer logout: ' . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Diagnóstico de conectividade
+     */
+    public function diagnosticConnectivity()
+    {
+        if (!$this->hasValidSettings()) {
+            return [
+                'success' => false,
+                'error' => 'Configurações da API não estão completas',
+                'tests' => []
+            ];
+        }
+
+        $tests = [];
+        $overallSuccess = true;
+
+        // Teste 1: Conectividade básica
+        try {
+            $start = microtime(true);
+            $response = Http::timeout(10)->get($this->baseUrl . '/manager/fetchInstances');
+            $duration = round((microtime(true) - $start) * 1000, 2);
+            
+            $tests['basic_connectivity'] = [
+                'name' => 'Conectividade Básica',
+                'success' => $response->successful(),
+                'duration_ms' => $duration,
+                'status_code' => $response->status(),
+                'message' => $response->successful() ? 'OK' : 'Falha na conectividade'
+            ];
+            
+            if (!$response->successful()) {
+                $overallSuccess = false;
+            }
+        } catch (\Exception $e) {
+            $tests['basic_connectivity'] = [
+                'name' => 'Conectividade Básica',
+                'success' => false,
+                'error' => $e->getMessage(),
+                'message' => 'Erro de conexão'
+            ];
+            $overallSuccess = false;
+        }
+
+        // Teste 2: Autenticação da API
+        try {
+            $start = microtime(true);
+            $response = Http::timeout(10)
+                ->withHeaders(['apikey' => $this->apiKey])
+                ->get($this->baseUrl . '/instance/fetchInstances');
+            $duration = round((microtime(true) - $start) * 1000, 2);
+            
+            $tests['api_auth'] = [
+                'name' => 'Autenticação da API',
+                'success' => $response->successful(),
+                'duration_ms' => $duration,
+                'status_code' => $response->status(),
+                'message' => $response->successful() ? 'API Key válida' : 'API Key inválida ou expirada'
+            ];
+            
+            if (!$response->successful()) {
+                $overallSuccess = false;
+            }
+        } catch (\Exception $e) {
+            $tests['api_auth'] = [
+                'name' => 'Autenticação da API',
+                'success' => false,
+                'error' => $e->getMessage(),
+                'message' => 'Erro na autenticação'
+            ];
+            $overallSuccess = false;
+        }
+
+        // Teste 3: Teste específico do endpoint create (GET para verificar se existe)
+        try {
+            $start = microtime(true);
+            $response = Http::timeout(10)
+                ->withHeaders(['apikey' => $this->apiKey])
+                ->get($this->baseUrl . '/instance/create');
+            $duration = round((microtime(true) - $start) * 1000, 2);
+            
+            // 404 é esperado para GET no endpoint create (só aceita POST)
+            $success = $response->status() === 404 && str_contains($response->body(), 'Cannot GET');
+            
+            $tests['create_endpoint'] = [
+                'name' => 'Endpoint Create Instance',
+                'success' => $success,
+                'duration_ms' => $duration,
+                'status_code' => $response->status(),
+                'message' => $success ? 'Endpoint disponível (aguardando POST)' : 'Endpoint com problema'
+            ];
+            
+            if (!$success) {
+                $overallSuccess = false;
+            }
+        } catch (\Exception $e) {
+            $tests['create_endpoint'] = [
+                'name' => 'Endpoint Create Instance',
+                'success' => false,
+                'error' => $e->getMessage(),
+                'message' => 'Erro ao acessar endpoint'
+            ];
+            $overallSuccess = false;
+        }
+
+        // Teste 4: Verificar se instância já existe para evitar conflitos
+        try {
+            $start = microtime(true);
+            $response = Http::timeout(10)
+                ->withHeaders(['apikey' => $this->apiKey])
+                ->get($this->baseUrl . '/instance/fetchInstances');
+            $duration = round((microtime(true) - $start) * 1000, 2);
+            
+            $instanceExists = false;
+            if ($response->successful()) {
+                $instances = $response->json();
+                foreach ($instances as $inst) {
+                    if ($inst['name'] === $this->instance) {
+                        $instanceExists = true;
+                        break;
+                    }
+                }
+            }
+            
+            $tests['instance_check'] = [
+                'name' => 'Verificação de Instância',
+                'success' => $response->successful(),
+                'duration_ms' => $duration,
+                'status_code' => $response->status(),
+                'message' => $instanceExists ? 
+                    "Instância '{$this->instance}' já existe" : 
+                    "Instância '{$this->instance}' não existe - pode ser criada",
+                'instance_exists' => $instanceExists
+            ];
+        } catch (\Exception $e) {
+            $tests['instance_check'] = [
+                'name' => 'Verificação de Instância',
+                'success' => false,
+                'error' => $e->getMessage(),
+                'message' => 'Erro ao verificar instâncias'
+            ];
+        }
+
+        return [
+            'success' => $overallSuccess,
+            'timestamp' => now()->toISOString(),
+            'config' => [
+                'base_url' => $this->baseUrl,
+                'instance' => $this->instance,
+                'has_api_key' => !empty($this->apiKey)
+            ],
+            'tests' => $tests
+        ];
     }
 
     /**
