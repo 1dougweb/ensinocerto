@@ -17,6 +17,8 @@ services:
       - CACHE_DRIVER=file
       - SESSION_DRIVER=file
       - QUEUE_CONNECTION=sync
+    ports:
+      - "80:80"
     depends_on:
       db:
         condition: service_healthy

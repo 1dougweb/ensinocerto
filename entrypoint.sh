@@ -1,24 +1,28 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Iniciando Ensino Certo..."
+echo "🚀 Iniciando Apache Laravel..."
 
-# Aguardar MySQL se disponível (não bloquear se não houver)
-if [ "${DB_CONNECTION:-}" = "mysql" ] && [ "${DB_HOST:-}" = "db" ]; then
+# Aguardar MySQL (timeout 60s)
+if [ "${DB_CONNECTION:-}" = "mysql" ]; then
     echo "🔌 Aguardando MySQL..."
-    timeout 30 bash -c 'until nc -z db 3306; do sleep 1; done' || echo "⚠️  MySQL não disponível, continuando..."
+    timeout 60 bash -c 'until curl -s db:3306 >/dev/null 2>&1; do sleep 2; done' || echo "⚠️  MySQL timeout, continuando..."
 fi
 
-# Executar migrações se possível
+# Executar setup Laravel
 if [ -f artisan ]; then
     echo "💾 Executando migrações..."
-    php artisan migrate --force || echo "⚠️  Migrações falharam, continuando..."
+    php artisan migrate --force || echo "⚠️  Migrações falharam"
     
     echo "🔗 Criando link storage..."
-    php artisan storage:link || echo "⚠️  Link storage falhou, continuando..."
+    php artisan storage:link || echo "⚠️  Link storage falhou"
+    
+    echo "🧹 Limpando caches..."
+    php artisan config:clear || echo "⚠️  Config clear falhou"
+    php artisan cache:clear || echo "⚠️  Cache clear falhou"
 fi
 
-echo "✅ Configuração concluída!"
+echo "✅ Laravel configurado!"
 echo "🌐 Iniciando Apache..."
 
 # Iniciar Apache
