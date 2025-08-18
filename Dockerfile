@@ -2,19 +2,25 @@ FROM php:8.2-apache
 
 # Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    curl \
+    build-essential \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
-    libzip-dev \
+    locales \
     zip \
-    nano \
+    jpegoptim optipng pngquant gifsicle \
+    vim \
+    unzip \
+    git \
+    curl \
+    netcat-traditional \
+    libzip-dev \
+    libonig-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql gd zip bcmath \
+    && docker-php-ext-install -j$(nproc) gd \
+    && docker-php-ext-install pdo pdo_mysql mbstring zip exif pcntl bcmath \
     && a2enmod rewrite \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Instalar Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
