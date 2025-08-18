@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: laravel-app
     environment:
       - APP_NAME=Ensino Certo
       - APP_ENV=production
@@ -24,8 +23,7 @@ services:
       - storage_data:/var/www/html/storage
       - bootstrap_cache:/var/www/html/bootstrap/cache
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     restart: unless-stopped
 
   db:
