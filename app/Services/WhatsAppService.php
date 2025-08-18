@@ -483,8 +483,12 @@ class WhatsAppService
         }
 
         try {
-            $response = Http::timeout(10) // Reduzir timeout para 10 segundos
-                ->connectTimeout(5) // Timeout de conexão rápido
+            // Usar timeout maior em produção se detectar problema de conectividade
+            $timeout = app()->environment('production') ? 30 : 10;
+            $connectTimeout = app()->environment('production') ? 15 : 5;
+            
+            $response = Http::timeout($timeout)
+                ->connectTimeout($connectTimeout)
                 ->withHeaders([
                     'apikey' => $this->apiKey
                 ])
@@ -1169,8 +1173,12 @@ class WhatsAppService
         }
 
         try {
-            $response = Http::timeout(10) // Reduzir timeout para 10 segundos
-                ->connectTimeout(5) // Timeout de conexão rápido
+            // Usar timeout maior em produção se detectar problema de conectividade
+            $timeout = app()->environment('production') ? 30 : 10;
+            $connectTimeout = app()->environment('production') ? 15 : 5;
+            
+            $response = Http::timeout($timeout)
+                ->connectTimeout($connectTimeout)
                 ->withHeaders([
                     'apikey' => $this->apiKey
                 ])
