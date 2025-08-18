@@ -1,68 +1,43 @@
 FROM php:8.2-apache
 
-# Instalar dependências do sistema
+# Instalar apenas o essencial
 RUN apt-get update && apt-get install -y \
-    build-essential \
     libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    locales \
-    zip \
-    jpegoptim optipng pngquant gifsicle \
-    vim \
-    unzip \
-    git \
-    curl \
-    netcat-traditional \
     libzip-dev \
-    libonig-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd \
-    && docker-php-ext-install pdo pdo_mysql mbstring zip exif pcntl bcmath \
+    unzip \
+    && docker-php-ext-install pdo_mysql gd zip \
     && a2enmod rewrite \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Instalar Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Instalar Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs
-
-# Configurar diretório de trabalho
+# Copiar código
 WORKDIR /var/www/html
-
-# Copiar código da aplicação
 COPY . .
 
-# Instalar dependências do Composer
+# Instalar dependências e build
 RUN composer install --no-dev --optimize-autoloader
-
-# Instalar dependências do Node e build
 RUN npm install && npm run build
 
-# Configurar Apache
-RUN echo '<VirtualHost *:80>\n\
-    DocumentRoot /var/www/html/public\n\
-    <Directory /var/www/html/public>\n\
-        AllowOverride All\n\
-        Require all granted\n\
-        DirectoryIndex index.php\n\
-    </Directory>\n\
-</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
+# Configurar Apache simples
+RUN echo 'DocumentRoot /var/www/html/public' > /etc/apache2/sites-available/000-default.conf
 
 # Permissões
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
-    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 775 storage bootstrap/cache
 
-# Criar .env a partir do .env.example
-RUN cp .env.example .env \
+# Criar .env básico
+RUN echo 'APP_NAME="Ensino Certo"' > .env \
+    && echo 'APP_ENV=production' >> .env \
+    && echo 'APP_KEY=' >> .env \
+    && echo 'APP_DEBUG=true' >> .env \
+    && echo 'DB_CONNECTION=mysql' >> .env \
+    && echo 'DB_HOST=db' >> .env \
+    && echo 'DB_DATABASE=ensino_certo' >> .env \
+    && echo 'DB_USERNAME=ensino_certo_user' >> .env \
+    && echo 'DB_PASSWORD=senha_segura' >> .env \
     && php artisan key:generate --force
 
-# Copiar e configurar entrypoint
-COPY entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
 EXPOSE 80
-
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["apache2-foreground"]

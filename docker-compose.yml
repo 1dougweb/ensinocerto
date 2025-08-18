@@ -1,76 +1,34 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     environment:
-      - APP_NAME=Ensino Certo
       - APP_ENV=production
       - APP_DEBUG=true
-      - APP_URL=http://localhost
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=ensino_certo
-      - DB_USERNAME=ensino_certo_user
-      - DB_PASSWORD=senha_segura
-      - CACHE_DRIVER=file
-      - SESSION_DRIVER=file
-      - QUEUE_CONNECTION=sync
     expose:
       - "80"
-    volumes:
-      - storage_data:/var/www/html/storage
-      - bootstrap_cache:/var/www/html/bootstrap/cache
     depends_on:
       - db
     restart: unless-stopped
 
   db:
-    image: mariadb:10.11
+    image: mysql:8.0
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root_senha_segura}
-      - MYSQL_DATABASE=${DB_DATABASE:-ensino_certo}
-      - MYSQL_USER=${DB_USERNAME:-ensino_certo_user}
-      - MYSQL_PASSWORD=${DB_PASSWORD:-senha_segura}
-    volumes:
-      - db_data:/var/lib/mysql
-      - ./database/dump.sql:/docker-entrypoint-initdb.d/dump.sql:ro
+      - MYSQL_ROOT_PASSWORD=root123
+      - MYSQL_DATABASE=ensino_certo
+      - MYSQL_USER=ensino_certo_user
+      - MYSQL_PASSWORD=senha_segura
     expose:
       - "3306"
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     environment:
       - PMA_HOST=db
       - PMA_USER=root
-      - PMA_PASSWORD=${MYSQL_ROOT_PASSWORD:-root_senha_segura}
-      - PMA_ARBITRARY=1
-      - UPLOAD_LIMIT=512M
-    volumes:
-      - ./phpmyadmin-config.php:/etc/phpmyadmin/config.user.inc.php:ro
+      - PMA_PASSWORD=root123
     expose:
       - "80"
     depends_on:
       - db
     restart: unless-stopped
-
-  adminer:
-    image: adminer:latest
-    expose:
-      - "8080"
-    depends_on:
-      - db
-    restart: unless-stopped
-
-volumes:
-  db_data:
-  storage_data:
-  bootstrap_cache:
