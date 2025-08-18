@@ -298,6 +298,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutos para criar instância
             
             try {
+                console.log('🚀 Iniciando criação de instância...');
+                console.log('URL:', routes.createInstance);
+                console.log('CSRF Token:', document.querySelector('meta[name="csrf-token"]').content);
+                
                 const response = await fetch(routes.createInstance, {
                     method: 'POST',
                     headers: {
@@ -309,11 +313,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 clearTimeout(timeoutId);
                 
+                console.log('📡 Resposta recebida:');
+                console.log('Status:', response.status);
+                console.log('StatusText:', response.statusText);
+                console.log('Headers:', Object.fromEntries(response.headers.entries()));
+                
+                const responseText = await response.text();
+                console.log('Body raw:', responseText);
+                
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    console.error('❌ Erro HTTP:', response.status, response.statusText);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText}`);
                 }
                 
-                return await response.json();
+                try {
+                    const jsonData = JSON.parse(responseText);
+                    console.log('✅ JSON parsed:', jsonData);
+                    return jsonData;
+                } catch (parseError) {
+                    console.error('❌ Erro ao fazer parse do JSON:', parseError);
+                    console.error('Raw response:', responseText);
+                    throw new Error('Resposta inválida do servidor');
+                }
             } catch (error) {
                 clearTimeout(timeoutId);
                 if (error.name === 'AbortError') {
