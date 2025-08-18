@@ -3,8 +3,7 @@ npm-debug.log
 .git
 .gitignore
 README.md
-.env
-.env.example
+.env.local
 .env.backup
 Dockerfile
 .dockerignore

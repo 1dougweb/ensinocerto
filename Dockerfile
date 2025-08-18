@@ -49,8 +49,8 @@ RUN echo '<VirtualHost *:80>\n\
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Criar .env se não existir
-RUN if [ ! -f .env ]; then cp .env.example .env; fi \
+# Criar .env a partir do .env.example
+RUN cp .env.example .env \
     && php artisan key:generate --force
 
 # Copiar e configurar entrypoint
