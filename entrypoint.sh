@@ -19,6 +19,14 @@ if [ ! -f .env ]; then
     cp .env.example .env
 fi
 
+# Aguardar MySQL estar disponível
+echo "🔌 Aguardando MySQL..."
+until nc -z db 3306; do
+    echo "⏳ Aguardando banco de dados..."
+    sleep 2
+done
+echo "✅ MySQL disponível!"
+
 # Gerar APP_KEY se não existir
 if ! grep -q "APP_KEY=base64:" .env; then
     echo "🔑 Gerando APP_KEY..."
