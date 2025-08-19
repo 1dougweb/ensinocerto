@@ -136,30 +136,10 @@ class WhatsAppService
                 ];
             }
 
-            Log::info('Criando nova instância WhatsApp', [
-                'instance' => $this->instance,
-                'base_url' => $this->baseUrl,
-                'full_url' => "{$this->baseUrl}/instance/create"
-            ]);
-
-            // Testar conectividade primeiro
-            try {
-                $pingResponse = Http::timeout(10)->get($this->baseUrl . '/manager/fetchInstances');
-                if (!$pingResponse->successful()) {
-                    Log::warning('Servidor Evolution API não está respondendo adequadamente', [
-                        'status' => $pingResponse->status()
-                    ]);
-                }
-            } catch (\Exception $pingError) {
-                Log::warning('Problema de conectividade detectado antes da criação', [
-                    'error' => $pingError->getMessage()
-                ]);
-            }
+            Log::info('Criando nova instância WhatsApp', ['instance' => $this->instance]);
 
             // Criar nova instância
-            $response = Http::timeout(90) // Aumentar timeout para 90 segundos
-                ->connectTimeout(20) // Timeout de conexão
-                ->retry(3, 3000) // Tentar 3 vezes com 3 segundos entre tentativas
+            $response = Http::timeout(30)
                 ->withHeaders([
                     'apikey' => $this->apiKey,
                     'Content-Type' => 'application/json'
@@ -177,19 +157,9 @@ class WhatsAppService
 
             if (!$response->successful()) {
                 $errorBody = $response->body();
-                $statusCode = $response->status();
-                
-                Log::warning('Resposta não bem-sucedida ao criar instância', [
-                    'status' => $statusCode,
-                    'body' => $errorBody,
-                    'headers' => $response->headers()
-                ]);
                 
                 // Verificar se é erro de nome duplicado
-                if (str_contains($errorBody, 'already in use') || 
-                    str_contains($errorBody, 'já existe') || 
-                    str_contains($errorBody, 'Instance already exists') ||
-                    $statusCode === 409) {
+                if (str_contains($errorBody, 'already in use') || str_contains($errorBody, 'já existe') || $response->status() === 409) {
                     Log::info('Instância já existe (detectado no erro), continuando...');
                     
                     return [
@@ -201,28 +171,12 @@ class WhatsAppService
                     ];
                 }
                 
-                // Verificar erros específicos da Evolution API
-                $errorMessage = "Erro HTTP {$statusCode}";
-                if ($statusCode === 401) {
-                    $errorMessage = 'API Key inválida ou expirada. Verifique suas credenciais.';
-                } elseif ($statusCode === 403) {
-                    $errorMessage = 'Acesso negado. Verifique as permissões da API Key.';
-                } elseif ($statusCode === 404) {
-                    $errorMessage = 'Endpoint não encontrado. Verifique a URL da API.';
-                } elseif ($statusCode >= 500) {
-                    $errorMessage = 'Erro interno do servidor Evolution API. Tente novamente em alguns minutos.';
-                } else {
-                    $errorMessage = "Erro {$statusCode}: {$errorBody}";
-                }
-                
-                Log::error('Erro ao criar instância - detalhado', [
-                    'status' => $statusCode,
-                    'body' => $errorBody,
-                    'instance' => $this->instance,
-                    'base_url' => $this->baseUrl
+                Log::error('Erro ao criar instância', [
+                    'status' => $response->status(),
+                    'body' => $errorBody
                 ]);
                 
-                throw new \Exception($errorMessage);
+                throw new \Exception('Erro ao criar instância: ' . $response->status() . ' - ' . $errorBody);
             }
 
             $data = $response->json();
@@ -232,56 +186,8 @@ class WhatsAppService
             sleep(2);
             
             return $data;
-            
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            $errorMsg = 'Erro de conexão: Não foi possível conectar ao servidor da Evolution API. Verifique se o servidor está online.';
-            Log::error('Erro de conexão ao criar instância WhatsApp', [
-                'error' => $e->getMessage(),
-                'base_url' => $this->baseUrl,
-                'instance' => $this->instance
-            ]);
-            throw new \Exception($errorMsg);
-            
-        } catch (\Illuminate\Http\Client\RequestException $e) {
-            // Em caso de timeout, verificar se a instância foi criada mesmo assim
-            Log::warning('Timeout detectado, verificando se instância foi criada...', [
-                'error' => $e->getMessage(),
-                'instance' => $this->instance
-            ]);
-            
-            // Aguardar um pouco e verificar se a instância foi criada
-            sleep(5);
-            
-            try {
-                if ($this->instanceExists()) {
-                    Log::info('Instância foi criada apesar do timeout');
-                    return [
-                        'instance' => [
-                            'instanceName' => $this->instance,
-                            'status' => 'created_after_timeout'
-                        ],
-                        'message' => 'Instância criada com sucesso (verificação após timeout)'
-                    ];
-                }
-            } catch (\Exception $verifyError) {
-                Log::warning('Erro ao verificar instância após timeout: ' . $verifyError->getMessage());
-            }
-            
-            $errorMsg = 'Timeout: A criação da instância demorou mais que o esperado. A instância pode ter sido criada. Verifique o status na página.';
-            Log::error('Timeout confirmado ao criar instância WhatsApp', [
-                'error' => $e->getMessage(),
-                'instance' => $this->instance,
-                'base_url' => $this->baseUrl
-            ]);
-            throw new \Exception($errorMsg);
-            
         } catch (\Exception $e) {
-            Log::error('Erro geral ao criar instância WhatsApp', [
-                'error' => $e->getMessage(),
-                'instance' => $this->instance,
-                'base_url' => $this->baseUrl,
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('Erro ao criar instância WhatsApp: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -296,26 +202,70 @@ class WhatsAppService
         }
 
         try {
-            // Primeiro, verificar se a instância existe
+            // Primeiro, verificar o status atual da instância
+            $connectionStatus = $this->getConnectionStatus();
+            
+            // Se já está conectado, retornar sucesso
+            if ($connectionStatus['connected']) {
+                return [
+                    'success' => true,
+                    'connected' => true,
+                    'message' => 'WhatsApp já está conectado'
+                ];
+            }
+            
+            // Se a instância não existe, criar uma nova
             if (!$this->instanceExists()) {
-                // Se não existe, criar uma nova
                 Log::info('Instância não existe, criando nova...');
                 $createResult = $this->createInstance();
                 
                 if (!isset($createResult['instance'])) {
                     throw new \Exception('Falha ao criar instância');
                 }
+                
+                // Aguardar inicialização
+                sleep(3);
+            }
+            
+            // Se está no estado "connecting" há muito tempo, resetar
+            if (isset($connectionStatus['state']) && $connectionStatus['state'] === 'connecting') {
+                Log::info('Instância travada em "connecting", forçando reset...');
+                $resetResult = $this->forceInstanceReset();
+                if (!$resetResult['success']) {
+                    return $resetResult;
+                }
+                // Continuar para tentar gerar QR Code após reset
             }
 
             // Tentar obter QR Code
-            Log::info('Solicitando QR Code', [
-                'instance' => $this->instance,
-                'url' => "{$this->baseUrl}/instance/connect/{$this->instance}"
-            ]);
+            $qrResult = $this->attemptQrCodeGeneration();
             
-            $response = Http::timeout(60) // Aumentar timeout para QR Code
-                ->connectTimeout(15)
-                ->retry(2, 2000) // 2 tentativas com 2 segundos entre elas
+            if ($qrResult['success']) {
+                return $qrResult;
+            }
+            
+            // Se falhou, tentar recrear a instância uma vez
+            Log::info('QR Code falhou, tentando recriar instância...');
+            $this->forceInstanceReset();
+            
+            // Aguardar e tentar novamente
+            sleep(3);
+            return $this->attemptQrCodeGeneration();
+
+        } catch (\Exception $e) {
+            Log::error('Erro ao obter QR Code: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Tentar gerar QR Code (método auxiliar)
+     */
+    private function attemptQrCodeGeneration()
+    {
+        try {
+            $response = Http::timeout(30)
                 ->withHeaders([
                     'apikey' => $this->apiKey
                 ])
@@ -326,54 +276,37 @@ class WhatsAppService
                 'body' => $response->body()
             ]);
 
-            // Se retornou 401, a instância pode ter sido deletada
-            if ($response->status() === 401) {
-                Log::info('Erro 401 - tentando recriar instância');
-                
-                // Tentar criar nova instância
-                $createResult = $this->createInstance();
-                
-                if (isset($createResult['instance'])) {
-                    // Aguardar um pouco e tentar novamente
-                    sleep(2);
-                    
-                    $response = Http::timeout(60)
-                        ->connectTimeout(15)
-                        ->withHeaders([
-                            'apikey' => $this->apiKey
-                        ])
-                        ->get("{$this->baseUrl}/instance/connect/{$this->instance}");
-                }
-            }
-
             if (!$response->successful()) {
-                $statusCode = $response->status();
-                $errorBody = $response->body();
-                
-                Log::error('Erro ao obter QR Code', [
-                    'status' => $statusCode,
-                    'body' => $errorBody,
-                    'instance' => $this->instance
-                ]);
-                
-                $errorMessage = "Erro ao obter QR Code";
-                if ($statusCode === 401) {
-                    $errorMessage = 'API Key inválida. Verifique suas credenciais.';
-                } elseif ($statusCode === 404) {
-                    $errorMessage = 'Instância não encontrada. Crie uma nova instância.';
-                } elseif ($statusCode >= 500) {
-                    $errorMessage = 'Servidor Evolution API indisponível. Tente novamente em alguns minutos.';
-                } else {
-                    $errorMessage = "Erro {$statusCode}: {$errorBody}";
-                }
-                
-                throw new \Exception($errorMessage);
+                return [
+                    'success' => false,
+                    'connected' => false,
+                    'message' => 'Erro na API: ' . $response->body()
+                ];
             }
 
             $data = $response->json();
             
             // Log da resposta completa para debug
             Log::info('Resposta completa da API Evolution', $data);
+            
+            // Se retornou apenas {"count":0}, a instância precisa ser reinicializada
+            if (isset($data['count']) && $data['count'] == 0 && count($data) == 1) {
+                Log::info('API retornou count:0, instância precisa ser reinicializada');
+                
+                // Tentar restart da instância
+                $restartResult = $this->restartInstance();
+                if ($restartResult) {
+                    // Aguardar e tentar novamente
+                    sleep(5);
+                    return $this->attemptQrCodeGenerationAfterRestart();
+                }
+                
+                return [
+                    'success' => false,
+                    'connected' => false,
+                    'message' => 'Instância em estado inconsistente. Tente novamente em alguns minutos.'
+                ];
+            }
             
             // Se já estiver conectado, não há QR code
             if (isset($data['instance']['state']) && $data['instance']['state'] === 'open') {
@@ -385,36 +318,11 @@ class WhatsAppService
             }
 
             // Verificar diferentes formatos de QR code na resposta
-            $qrcode = null;
-            
-            // Formato 1: base64 direto
-            if (isset($data['base64']) && !empty($data['base64'])) {
-                $qrcode = $data['base64'];
-            }
-            // Formato 2: dentro de qrcode.base64
-            elseif (isset($data['qrcode']['base64']) && !empty($data['qrcode']['base64'])) {
-                $qrcode = $data['qrcode']['base64'];
-            }
-            // Formato 3: qrcode como string
-            elseif (isset($data['qrcode']) && is_string($data['qrcode']) && !empty($data['qrcode'])) {
-                $qrcode = $data['qrcode'];
-            }
-            // Formato 4: dentro de qr.base64
-            elseif (isset($data['qr']['base64']) && !empty($data['qr']['base64'])) {
-                $qrcode = $data['qr']['base64'];
-            }
-
-            Log::info('QR Code extraído', [
-                'found' => !empty($qrcode),
-                'length' => $qrcode ? strlen($qrcode) : 0,
-                'available_keys' => array_keys($data)
-            ]);
+            $qrcode = $this->extractQrCodeFromResponse($data);
 
             if (empty($qrcode)) {
-                // Se não tem QR code, verificar se precisa aguardar inicialização
+                // Aguardar e tentar uma segunda vez
                 Log::info('QR Code vazio, aguardando inicialização...');
-                
-                // Aguardar um pouco e tentar novamente
                 sleep(3);
                 
                 $retryResponse = Http::timeout(30)
@@ -424,15 +332,7 @@ class WhatsAppService
                 if ($retryResponse->successful()) {
                     $retryData = $retryResponse->json();
                     Log::info('Segunda tentativa de QR Code', $retryData);
-                    
-                    // Tentar extrair QR code novamente
-                    if (isset($retryData['base64'])) {
-                        $qrcode = $retryData['base64'];
-                    } elseif (isset($retryData['qrcode']['base64'])) {
-                        $qrcode = $retryData['qrcode']['base64'];
-                    } elseif (isset($retryData['qrcode']) && is_string($retryData['qrcode'])) {
-                        $qrcode = $retryData['qrcode'];
-                    }
+                    $qrcode = $this->extractQrCodeFromResponse($retryData);
                 }
                 
                 if (empty($qrcode)) {
@@ -458,9 +358,205 @@ class WhatsAppService
             ];
 
         } catch (\Exception $e) {
-            Log::error('Erro ao obter QR Code: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
-            throw $e;
+            Log::error('Erro ao tentar gerar QR Code: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'connected' => false,
+                'message' => 'Erro interno: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Reiniciar instância
+     */
+    private function restartInstance()
+    {
+        try {
+            Log::info('Tentando reiniciar instância...');
+            
+            $response = Http::timeout(30)
+                ->withHeaders(['apikey' => $this->apiKey])
+                ->put("{$this->baseUrl}/instance/restart/{$this->instance}");
+            
+            if ($response->successful()) {
+                Log::info('Instância reiniciada com sucesso');
+                return true;
+            } else {
+                Log::warning('Falha ao reiniciar instância: ' . $response->body());
+                return false;
+            }
+        } catch (\Exception $e) {
+            Log::error('Erro ao reiniciar instância: ' . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Tentar QR Code após restart
+     */
+    private function attemptQrCodeGenerationAfterRestart()
+    {
+        try {
+            $response = Http::timeout(30)
+                ->withHeaders(['apikey' => $this->apiKey])
+                ->get("{$this->baseUrl}/instance/connect/{$this->instance}");
+
+            Log::info('Resposta do endpoint connect após restart', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            if (!$response->successful()) {
+                return [
+                    'success' => false,
+                    'connected' => false,
+                    'message' => 'Erro na API após restart: ' . $response->body()
+                ];
+            }
+
+            $data = $response->json();
+            
+            // Se ainda retornar count:0, retornar erro
+            if (isset($data['count']) && $data['count'] == 0 && count($data) == 1) {
+                return [
+                    'success' => false,
+                    'connected' => false,
+                    'message' => 'Instância ainda não está pronta. Aguarde alguns minutos e tente novamente.'
+                ];
+            }
+            
+            // Se já estiver conectado
+            if (isset($data['instance']['state']) && $data['instance']['state'] === 'open') {
+                return [
+                    'success' => true,
+                    'connected' => true,
+                    'message' => 'WhatsApp conectado automaticamente após restart'
+                ];
+            }
+
+            // Extrair QR Code
+            $qrcode = $this->extractQrCodeFromResponse($data);
+
+            if (empty($qrcode)) {
+                return [
+                    'success' => false,
+                    'connected' => false,
+                    'message' => 'QR Code não disponível após restart. Tente novamente em alguns minutos.'
+                ];
+            }
+
+            // Verificar se o QR code é válido
+            if (!str_starts_with($qrcode, 'data:image/')) {
+                $qrcode = 'data:image/png;base64,' . $qrcode;
+            }
+
+            return [
+                'success' => true,
+                'connected' => false,
+                'qrcode' => [
+                    'base64' => $qrcode
+                ],
+                'message' => 'QR Code gerado após reinicialização da instância'
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Erro ao tentar gerar QR Code após restart: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'connected' => false,
+                'message' => 'Erro após restart: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Extrair QR Code da resposta da API
+     */
+    private function extractQrCodeFromResponse($data)
+    {
+        $qrcode = null;
+        
+        // Formato 1: base64 direto
+        if (isset($data['base64']) && !empty($data['base64'])) {
+            $qrcode = $data['base64'];
+        }
+        // Formato 2: dentro de qrcode.base64
+        elseif (isset($data['qrcode']['base64']) && !empty($data['qrcode']['base64'])) {
+            $qrcode = $data['qrcode']['base64'];
+        }
+        // Formato 3: qrcode como string
+        elseif (isset($data['qrcode']) && is_string($data['qrcode']) && !empty($data['qrcode'])) {
+            $qrcode = $data['qrcode'];
+        }
+        // Formato 4: dentro de qr.base64
+        elseif (isset($data['qr']['base64']) && !empty($data['qr']['base64'])) {
+            $qrcode = $data['qr']['base64'];
+        }
+
+        Log::info('QR Code extraído', [
+            'found' => !empty($qrcode),
+            'length' => $qrcode ? strlen($qrcode) : 0,
+            'available_keys' => array_keys($data)
+        ]);
+        
+        return $qrcode;
+    }
+    
+    /**
+     * Forçar reset da instância
+     */
+    private function forceInstanceReset()
+    {
+        try {
+            Log::info('Forçando reset da instância...');
+            
+            // 1. Tentar logout primeiro
+            try {
+                Http::timeout(15)
+                    ->withHeaders(['apikey' => $this->apiKey])
+                    ->delete("{$this->baseUrl}/instance/logout/{$this->instance}");
+                Log::info('Logout realizado');
+            } catch (\Exception $e) {
+                Log::info('Logout falhou (esperado): ' . $e->getMessage());
+            }
+            
+            // 2. Deletar instância
+            try {
+                Http::timeout(15)
+                    ->withHeaders(['apikey' => $this->apiKey])
+                    ->delete("{$this->baseUrl}/instance/delete/{$this->instance}");
+                Log::info('Instância deletada');
+                sleep(2);
+            } catch (\Exception $e) {
+                Log::warning('Erro ao deletar instância: ' . $e->getMessage());
+            }
+            
+            // 3. Criar nova instância
+            $createResult = $this->createInstance();
+            
+            if (!isset($createResult['instance'])) {
+                throw new \Exception('Falha ao recriar instância após reset');
+            }
+            
+            Log::info('Instância recriada com sucesso após reset');
+            
+            // Aguardar inicialização
+            sleep(3);
+            
+            return [
+                'success' => true,
+                'connected' => false,
+                'message' => 'Instância resetada. Gerando novo QR Code...'
+            ];
+            
+        } catch (\Exception $e) {
+            Log::error('Erro ao resetar instância: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'connected' => false,
+                'message' => 'Erro ao resetar instância: ' . $e->getMessage()
+            ];
         }
     }
 
@@ -483,12 +579,7 @@ class WhatsAppService
         }
 
         try {
-            // Usar timeout maior em produção se detectar problema de conectividade
-            $timeout = app()->environment('production') ? 30 : 10;
-            $connectTimeout = app()->environment('production') ? 15 : 5;
-            
-            $response = Http::timeout($timeout)
-                ->connectTimeout($connectTimeout)
+            $response = Http::timeout(30)
                 ->withHeaders([
                     'apikey' => $this->apiKey
                 ])
@@ -1084,57 +1175,17 @@ class WhatsAppService
         }
 
         try {
-            Log::info('Tentando deletar instância WhatsApp', [
-                'base_url' => $this->baseUrl,
-                'instance' => $this->instance,
-                'full_url' => "{$this->baseUrl}/instance/delete/{$this->instance}"
-            ]);
-
-            $response = Http::timeout(60) // Aumentar timeout para 60 segundos
-                ->connectTimeout(15) // Timeout de conexão
-                ->retry(3, 2000) // Tentar 3 vezes com 2 segundos entre tentativas
+            $response = Http::timeout(30)
                 ->withHeaders([
-                    'apikey' => $this->apiKey,
-                    'Content-Type' => 'application/json'
+                    'apikey' => $this->apiKey
                 ])
                 ->delete("{$this->baseUrl}/instance/delete/{$this->instance}");
 
-            if (!$response->successful()) {
-                $errorMsg = "Erro HTTP {$response->status()}: " . $response->body();
-                Log::error('Erro na resposta ao deletar instância', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
-                throw new \Exception($errorMsg);
-            }
-
             $this->updateConnectionStatus(false);
             
-            Log::info('Instância WhatsApp deletada com sucesso');
             return $response->json();
-            
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            $errorMsg = 'Erro de conexão: Não foi possível conectar ao servidor da Evolution API. Verifique se o servidor está online.';
-            Log::error('Erro de conexão ao deletar instância WhatsApp', [
-                'error' => $e->getMessage(),
-                'base_url' => $this->baseUrl
-            ]);
-            throw new \Exception($errorMsg);
-            
-        } catch (\Illuminate\Http\Client\RequestException $e) {
-            $errorMsg = 'Timeout: A operação demorou mais que o esperado. Tente novamente em alguns minutos.';
-            Log::error('Timeout ao deletar instância WhatsApp', [
-                'error' => $e->getMessage(),
-                'instance' => $this->instance
-            ]);
-            throw new \Exception($errorMsg);
-            
         } catch (\Exception $e) {
-            Log::error('Erro geral ao deletar instância WhatsApp', [
-                'error' => $e->getMessage(),
-                'instance' => $this->instance,
-                'base_url' => $this->baseUrl
-            ]);
+            Log::error('Erro ao deletar instância WhatsApp: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -1173,12 +1224,7 @@ class WhatsAppService
         }
 
         try {
-            // Usar timeout maior em produção se detectar problema de conectividade
-            $timeout = app()->environment('production') ? 30 : 10;
-            $connectTimeout = app()->environment('production') ? 15 : 5;
-            
-            $response = Http::timeout($timeout)
-                ->connectTimeout($connectTimeout)
+            $response = Http::timeout(30)
                 ->withHeaders([
                     'apikey' => $this->apiKey
                 ])
@@ -1248,160 +1294,6 @@ class WhatsAppService
             Log::error('Erro ao fazer logout: ' . $e->getMessage());
             return false;
         }
-    }
-
-    /**
-     * Diagnóstico de conectividade
-     */
-    public function diagnosticConnectivity()
-    {
-        if (!$this->hasValidSettings()) {
-            return [
-                'success' => false,
-                'error' => 'Configurações da API não estão completas',
-                'tests' => []
-            ];
-        }
-
-        $tests = [];
-        $overallSuccess = true;
-
-        // Teste 1: Conectividade básica
-        try {
-            $start = microtime(true);
-            $response = Http::timeout(10)->get($this->baseUrl . '/manager/fetchInstances');
-            $duration = round((microtime(true) - $start) * 1000, 2);
-            
-            $tests['basic_connectivity'] = [
-                'name' => 'Conectividade Básica',
-                'success' => $response->successful(),
-                'duration_ms' => $duration,
-                'status_code' => $response->status(),
-                'message' => $response->successful() ? 'OK' : 'Falha na conectividade'
-            ];
-            
-            if (!$response->successful()) {
-                $overallSuccess = false;
-            }
-        } catch (\Exception $e) {
-            $tests['basic_connectivity'] = [
-                'name' => 'Conectividade Básica',
-                'success' => false,
-                'error' => $e->getMessage(),
-                'message' => 'Erro de conexão'
-            ];
-            $overallSuccess = false;
-        }
-
-        // Teste 2: Autenticação da API
-        try {
-            $start = microtime(true);
-            $response = Http::timeout(10)
-                ->withHeaders(['apikey' => $this->apiKey])
-                ->get($this->baseUrl . '/instance/fetchInstances');
-            $duration = round((microtime(true) - $start) * 1000, 2);
-            
-            $tests['api_auth'] = [
-                'name' => 'Autenticação da API',
-                'success' => $response->successful(),
-                'duration_ms' => $duration,
-                'status_code' => $response->status(),
-                'message' => $response->successful() ? 'API Key válida' : 'API Key inválida ou expirada'
-            ];
-            
-            if (!$response->successful()) {
-                $overallSuccess = false;
-            }
-        } catch (\Exception $e) {
-            $tests['api_auth'] = [
-                'name' => 'Autenticação da API',
-                'success' => false,
-                'error' => $e->getMessage(),
-                'message' => 'Erro na autenticação'
-            ];
-            $overallSuccess = false;
-        }
-
-        // Teste 3: Teste específico do endpoint create (GET para verificar se existe)
-        try {
-            $start = microtime(true);
-            $response = Http::timeout(10)
-                ->withHeaders(['apikey' => $this->apiKey])
-                ->get($this->baseUrl . '/instance/create');
-            $duration = round((microtime(true) - $start) * 1000, 2);
-            
-            // 404 é esperado para GET no endpoint create (só aceita POST)
-            $success = $response->status() === 404 && str_contains($response->body(), 'Cannot GET');
-            
-            $tests['create_endpoint'] = [
-                'name' => 'Endpoint Create Instance',
-                'success' => $success,
-                'duration_ms' => $duration,
-                'status_code' => $response->status(),
-                'message' => $success ? 'Endpoint disponível (aguardando POST)' : 'Endpoint com problema'
-            ];
-            
-            if (!$success) {
-                $overallSuccess = false;
-            }
-        } catch (\Exception $e) {
-            $tests['create_endpoint'] = [
-                'name' => 'Endpoint Create Instance',
-                'success' => false,
-                'error' => $e->getMessage(),
-                'message' => 'Erro ao acessar endpoint'
-            ];
-            $overallSuccess = false;
-        }
-
-        // Teste 4: Verificar se instância já existe para evitar conflitos
-        try {
-            $start = microtime(true);
-            $response = Http::timeout(10)
-                ->withHeaders(['apikey' => $this->apiKey])
-                ->get($this->baseUrl . '/instance/fetchInstances');
-            $duration = round((microtime(true) - $start) * 1000, 2);
-            
-            $instanceExists = false;
-            if ($response->successful()) {
-                $instances = $response->json();
-                foreach ($instances as $inst) {
-                    if ($inst['name'] === $this->instance) {
-                        $instanceExists = true;
-                        break;
-                    }
-                }
-            }
-            
-            $tests['instance_check'] = [
-                'name' => 'Verificação de Instância',
-                'success' => $response->successful(),
-                'duration_ms' => $duration,
-                'status_code' => $response->status(),
-                'message' => $instanceExists ? 
-                    "Instância '{$this->instance}' já existe" : 
-                    "Instância '{$this->instance}' não existe - pode ser criada",
-                'instance_exists' => $instanceExists
-            ];
-        } catch (\Exception $e) {
-            $tests['instance_check'] = [
-                'name' => 'Verificação de Instância',
-                'success' => false,
-                'error' => $e->getMessage(),
-                'message' => 'Erro ao verificar instâncias'
-            ];
-        }
-
-        return [
-            'success' => $overallSuccess,
-            'timestamp' => now()->toISOString(),
-            'config' => [
-                'base_url' => $this->baseUrl,
-                'instance' => $this->instance,
-                'has_api_key' => !empty($this->apiKey)
-            ],
-            'tests' => $tests
-        ];
     }
 
     /**

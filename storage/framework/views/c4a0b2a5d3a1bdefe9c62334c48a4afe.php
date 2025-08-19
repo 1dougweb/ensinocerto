@@ -327,34 +327,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Criar instância
     btnCreateInstance.addEventListener('click', async function() {
         await executeAction(this, async () => {
-            // Criar um controller para abortar a requisição se necessário
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutos para criar instância
-            
-            try {
-                const response = await fetch(routes.createInstance, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        'Content-Type': 'application/json'
-                    },
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const response = await fetch(routes.createInstance, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Content-Type': 'application/json'
                 }
-                
-                return await response.json();
-            } catch (error) {
-                clearTimeout(timeoutId);
-                if (error.name === 'AbortError') {
-                    throw new Error('Timeout: A criação da instância demorou mais que o esperado (3 minutos). Tente novamente.');
-                }
-                throw error;
-            }
+            });
+            return await response.json();
         }, 'Instância criada com sucesso!');
     });
 
@@ -419,14 +399,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 }
             } else {
-                // Se a requisição falhou
+                // Se a requisição não teve sucesso (mas não é necessariamente erro)
                 qrcodeContainer.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="fas fa-times-circle me-2"></i>
-                        ${data.message || data.error || 'Erro ao gerar QR Code'}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle me-2"></i>
+                        ${data.message || data.error || 'QR Code não disponível no momento'}
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                                <i class="fas fa-sync-alt me-1"></i>
+                                Tentar Novamente
+                            </button>
+                        </div>
                     </div>
                 `;
-                throw new Error(data.error || data.message || 'Erro ao gerar QR Code');
+                
+                // Não fazer throw Error para success: false - é uma resposta válida
+                return data;
             }
             
             return data;
@@ -456,33 +444,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!confirm('Tem certeza que deseja deletar a instância? Esta ação não pode ser desfeita.')) return;
         
         await executeAction(this, async () => {
-            // Criar um controller para abortar a requisição se necessário
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutos
-            
-            try {
-                const response = await fetch(routes.deleteInstance, {
-                    method: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const response = await fetch(routes.deleteInstance, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 }
-                
-                return await response.json();
-            } catch (error) {
-                clearTimeout(timeoutId);
-                if (error.name === 'AbortError') {
-                    throw new Error('Timeout: A operação demorou mais que o esperado (2 minutos).');
-                }
-                throw error;
-            }
+            });
+            return await response.json();
         }, 'Instância deletada com sucesso!');
     });
 
@@ -528,19 +496,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Erro:', error);
-            
-            // Tratamento específico para diferentes tipos de erro
-            let errorMessage = 'Erro: ' + error.message;
-            
-            if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                errorMessage = 'Erro de conexão: Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
-            } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-                errorMessage = 'Timeout: A operação demorou mais que o esperado. Tente novamente em alguns minutos.';
-            } else if (error.message.includes('Connection') || error.message.includes('conexão')) {
-                errorMessage = 'Erro de conexão: Não foi possível conectar ao servidor da Evolution API.';
-            }
-            
-            toastr.error(errorMessage);
+            toastr.error('Erro: ' + error.message);
         } finally {
             button.disabled = false;
             // Restaurar texto original imediatamente

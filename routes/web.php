@@ -431,6 +431,7 @@ Route::middleware(['auth', 'theme', \App\Http\Middleware\CheckMenuPermission::cl
             Route::put('/whatsapp', [WhatsAppController::class, 'update'])->name('admin.settings.whatsapp.update');
             Route::get('/whatsapp/qr-code', [WhatsAppController::class, 'qrCode'])->name('admin.settings.whatsapp.qr-code');
             Route::post('/whatsapp/create-instance', [WhatsAppController::class, 'createInstance'])->name('admin.settings.whatsapp.create-instance');
+            Route::post('/whatsapp/force-recreate', [WhatsAppController::class, 'forceRecreate'])->name('admin.settings.whatsapp.force-recreate');
             Route::get('/whatsapp/status', [WhatsAppController::class, 'status'])->name('admin.settings.whatsapp.status');
             Route::get('/whatsapp/check-instance', [WhatsAppController::class, 'checkInstance'])->name('admin.settings.whatsapp.check-instance');
             Route::get('/whatsapp/check-connection-change', [WhatsAppController::class, 'checkConnectionChange'])->name('admin.settings.whatsapp.check-connection-change');
