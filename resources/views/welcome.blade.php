@@ -292,9 +292,46 @@
         }
         
         .form-message.warning {
-            background-color: rgba(255, 193, 7, 0.1);
-            color: #ffc107;
-            border: 1px solid #ffc107;
+            background-color: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+            border: 1px solid #dc3545;
+        }
+        
+        /* Estilos para campos com erro */
+        .form-group input.is-invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+        
+        .form-group input.is-invalid:focus {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+        
+        /* Estilos para o botão de limpar formulário */
+        .clear-form-btn {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s ease;
+        }
+        
+        .clear-form-btn:hover {
+            background-color: #5a6268;
+        }
+        
+        /* Estilos para indicador de carregamento */
+        .fa-spinner {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
             <!-- Schema.org Structured Data para IA -->
@@ -995,6 +1032,13 @@
         // Função para verificar se email ou telefone já existem
         function checkExistingContact(email, phone, formId) {
             return new Promise((resolve, reject) => {
+                // Mostrar indicador de carregamento
+                const form = document.getElementById(formId);
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
+                submitBtn.disabled = true;
+                
                 fetch('/api/check-existing-contact', {
                     method: 'POST',
                     headers: {
@@ -1005,9 +1049,12 @@
                 })
                 .then(response => response.json())
                 .then(data => {
+                    // Restaurar botão
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                    
                     if (data.exists) {
                         // Mostrar mensagem personalizada
-                        const form = document.getElementById(formId);
                         let messageDiv = form.querySelector('.form-message');
                         
                         if (!messageDiv) {
@@ -1016,8 +1063,25 @@
                             form.insertBefore(messageDiv, form.querySelector('button[type="submit"]'));
                         }
                         
-                        messageDiv.textContent = data.message || 'Este contato já está cadastrado em nosso sistema.';
+                        // Usar mensagem simplificada
+                        messageDiv.innerHTML = data.message;
                         messageDiv.style.display = 'block';
+                        
+                        // Adicionar botão para limpar formulário
+                        if (!form.querySelector('.clear-form-btn')) {
+                            const clearBtn = document.createElement('button');
+                            clearBtn.type = 'button';
+                            clearBtn.className = 'btn btn-secondary clear-form-btn';
+                            clearBtn.innerHTML = '<i class="fas fa-eraser"></i> Limpar formulário';
+                            clearBtn.style.marginTop = '10px';
+                            clearBtn.onclick = function() {
+                                form.reset();
+                                messageDiv.style.display = 'none';
+                                clearBtn.remove();
+                            };
+                            messageDiv.appendChild(document.createElement('br'));
+                            messageDiv.appendChild(clearBtn);
+                        }
                         
                         // Tracking do evento
                         if (typeof gtag !== 'undefined') {
@@ -1030,7 +1094,6 @@
                         resolve(true); // Contato existe
                     } else {
                         // Remover mensagem se existir
-                        const form = document.getElementById(formId);
                         const messageDiv = form.querySelector('.form-message.warning');
                         if (messageDiv) {
                             messageDiv.style.display = 'none';
@@ -1040,6 +1103,21 @@
                 })
                 .catch(error => {
                     console.error('Erro ao verificar contato:', error);
+                    
+                    // Restaurar botão
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                    
+                    // Mostrar mensagem de erro
+                    let messageDiv = form.querySelector('.form-message');
+                    if (!messageDiv) {
+                        messageDiv = document.createElement('div');
+                        messageDiv.className = 'form-message error';
+                        form.insertBefore(messageDiv, form.querySelector('button[type="submit"]'));
+                    }
+                    messageDiv.textContent = 'Erro ao verificar dados. Tente novamente.';
+                    messageDiv.style.display = 'block';
+                    
                     resolve(false); // Em caso de erro, permitir o envio
                 });
             });
@@ -1072,6 +1150,13 @@
             } else {
                 // Atualizar o valor do campo com o número completo
                 phone.value = fullNumber;
+                phone.classList.remove('is-invalid');
+                
+                // Remover mensagens de erro anteriores
+                var existingErrors = phone.parentNode.querySelectorAll('.error-message');
+                existingErrors.forEach(function(el) {
+                    el.remove();
+                });
             }
             
             // Verificar se o contato já existe
@@ -1104,6 +1189,167 @@
                 }
             });
         });
+        
+        // Validação em tempo real para email
+        function initEmailValidation() {
+            const emailInputs = document.querySelectorAll('input[name="email"]');
+            let emailValidationTimeout;
+            
+            emailInputs.forEach(function(emailInput) {
+                emailInput.addEventListener('blur', function() {
+                    const email = this.value.trim();
+                    const form = this.closest('form');
+                    
+                    if (email && isValidEmail(email)) {
+                        // Aguardar 500ms após o usuário parar de digitar
+                        clearTimeout(emailValidationTimeout);
+                        emailValidationTimeout = setTimeout(() => {
+                            checkEmailAvailability(email, form);
+                        }, 500);
+                    }
+                });
+                
+                emailInput.addEventListener('input', function() {
+                    // Limpar mensagens de validação ao digitar
+                    const form = this.closest('form');
+                    const messageDiv = form.querySelector('.form-message.warning');
+                    if (messageDiv) {
+                        messageDiv.style.display = 'none';
+                    }
+                    
+                    // Limpar classe de erro
+                    this.classList.remove('is-invalid');
+                });
+            });
+            
+            // Adicionar listeners para outros campos
+            const allInputs = document.querySelectorAll('input, select');
+            allInputs.forEach(function(input) {
+                input.addEventListener('input', function() {
+                    // Limpar erros de validação ao digitar
+                    const form = this.closest('form');
+                    if (form) {
+                        clearValidationErrors(form);
+                    }
+                });
+                
+                input.addEventListener('change', function() {
+                    // Limpar erros de validação ao mudar
+                    const form = this.closest('form');
+                    if (form) {
+                        clearValidationErrors(form);
+                    }
+                });
+            });
+        }
+        
+        // Verificar disponibilidade do email
+        function checkEmailAvailability(email, form) {
+            // Verificar se já existe uma inscrição com este email
+            fetch('/api/check-existing-contact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ email: email, phone: '' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.exists && data.field === 'email') {
+                    // Mostrar aviso de email duplicado
+                    let messageDiv = form.querySelector('.form-message');
+                    
+                    if (!messageDiv) {
+                        messageDiv = document.createElement('div');
+                        messageDiv.className = 'form-message warning';
+                        form.insertBefore(messageDiv, form.querySelector('button[type="submit"]'));
+                    }
+                    
+                    messageDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${data.message}`;
+                    messageDiv.style.display = 'block';
+                    
+                    // Adicionar classe de erro ao campo
+                    const emailField = form.querySelector('input[name="email"]');
+                    emailField.classList.add('is-invalid');
+                } else {
+                    // Remover avisos e classes de erro
+                    const messageDiv = form.querySelector('.form-message.warning');
+                    if (messageDiv) {
+                        messageDiv.style.display = 'none';
+                    }
+                    
+                    const emailField = form.querySelector('input[name="email"]');
+                    emailField.classList.remove('is-invalid');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao verificar email:', error);
+            });
+        }
+        
+        // Função para validar formato de email
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+        
+        // Função para lidar com erros de validação do servidor
+        function handleServerValidationErrors(form, errors) {
+            // Limpar mensagens anteriores
+            const existingMessages = form.querySelectorAll('.form-message');
+            existingMessages.forEach(msg => msg.remove());
+            
+            // Criar mensagem de erro
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'form-message error';
+            
+            let errorMessage = '<strong>Erro de validação:</strong><br>';
+            
+            if (errors.email) {
+                errorMessage += `• ${errors.email}<br>`;
+                const emailField = form.querySelector('input[name="email"]');
+                if (emailField) {
+                    emailField.classList.add('is-invalid');
+                }
+            }
+            
+            if (errors.telefone) {
+                errorMessage += `• ${errors.telefone}<br>`;
+                const phoneField = form.querySelector('input[name="telefone"]');
+                if (phoneField) {
+                    phoneField.classList.add('is-invalid');
+                }
+            }
+            
+            if (errors.nome) {
+                errorMessage += `• ${errors.nome}<br>`;
+            }
+            
+            if (errors.curso) {
+                errorMessage += `• ${errors.curso}<br>`;
+            }
+            
+            if (errors.modalidade) {
+                errorMessage += `• ${errors.modalidade}<br>`;
+            }
+            
+            if (errors.termos) {
+                errorMessage += `• ${errors.termos}<br>`;
+            }
+            
+            messageDiv.innerHTML = errorMessage;
+            form.insertBefore(messageDiv, form.querySelector('button[type="submit"]'));
+        }
+        
+        // Função para limpar erros de validação
+        function clearValidationErrors(form) {
+            const existingMessages = form.querySelectorAll('.form-message');
+            existingMessages.forEach(msg => msg.remove());
+            
+            const invalidFields = form.querySelectorAll('.is-invalid');
+            invalidFields.forEach(field => field.classList.remove('is-invalid'));
+        }
         
         // Tracking de campos individuais
         document.querySelectorAll('#formulario-contato input, #formulario-contato select').forEach(function(el) {
@@ -1416,6 +1662,7 @@
             setTimeout(function() {
                 initOfertaForm();
                 initDuvidasForm();
+                initEmailValidation();
             }, 100);
             
             // Inicializar o banner de cookies

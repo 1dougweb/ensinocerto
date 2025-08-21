@@ -28,8 +28,8 @@ class InscricaoRequest extends FormRequest
         
         return [
             'nome' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'telefone' => 'required|string|max:20',
+            'email' => 'required|email|max:255|unique:inscricaos,email',
+            'telefone' => 'required|string|max:20|unique:inscricaos,telefone',
             'curso' => 'required|string|in:' . implode(',', $validCourses),
             'modalidade' => 'required|string|in:' . implode(',', $validModalities),
             'termos' => 'required|accepted',
@@ -45,7 +45,9 @@ class InscricaoRequest extends FormRequest
             'nome.required' => 'O campo nome é obrigatório.',
             'email.required' => 'O campo email é obrigatório.',
             'email.email' => 'Por favor, insira um email válido.',
+            'email.unique' => 'Você já se inscreveu em breve entraremos em contato',
             'telefone.required' => 'O campo telefone é obrigatório.',
+            'telefone.unique' => 'Você já se inscreveu em breve entraremos em contato',
             'curso.required' => 'Por favor, selecione um curso.',
             'curso.in' => 'Por favor, selecione um curso válido.',
             'modalidade.required' => 'Por favor, selecione a modalidade de ensino.',
