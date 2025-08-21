@@ -17,6 +17,9 @@
             <button type="button" class="btn btn-outline-success me-2" onclick="syncAllFiles()" id="syncAllBtn">
                 <i class="fas fa-sync-alt me-2"></i>Sincronização Completa
             </button>
+            <button type="button" class="btn btn-outline-warning me-2" onclick="testModal()" title="Testar Modal">
+                <i class="fas fa-bug me-2"></i>Testar Modal
+            </button>
             <!-- <div class="btn-group">
                 <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="fas fa-sync me-2"></i>Sincronizar
@@ -24,7 +27,7 @@
                 <ul class="dropdown-menu dropdown-menu-end">
                     <li><a class="dropdown-item" href="javascript:void(0)" onclick="cleanupRecords()"><i class="fas fa-sync me-2"></i>Sincronização Normal</a></li>
                     <li><a class="dropdown-item" href="javascript:void(0)" onclick="forceCleanup()"><i class="fas fa-broom me-2"></i>Limpeza Forçada</a></li>
-                </ul>
+                </ul>   
             </div> -->
         </div>
         @endif
@@ -368,45 +371,18 @@
                 <input type="hidden" id="deleteFileIsFolder">
                 <p>Tem certeza que deseja excluir <strong id="deleteFileName"></strong>?</p>
                 
-                <!-- Mensagem específica para pastas -->
-                <div id="folderWarning" class="alert alert-warning d-none">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <strong>Atenção:</strong> Esta é uma pasta. Pastas só podem ser excluídas se estiverem vazias.
+                <p class="text-muted">Esta ação excluirá o item permanentemente do Google Drive.</p>
+                
+                <!-- Aviso de exclusão -->
+                <div id="recursiveWarning" class="alert alert-danger">
+                    <strong>Atenção:</strong> Esta operação excluirá o item permanentemente!
                 </div>
                 
-                <!-- Aviso de exclusão recursiva -->
-                <div id="recursiveWarning" class="alert alert-danger d-none">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <strong>⚠️ Exclusão Recursiva:</strong> Esta opção excluirá a pasta e <strong>TODO</strong> o seu conteúdo permanentemente!
-                </div>
-                
-                <!-- Opções de exclusão -->
-                <div class="mt-3">
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="deleteOption" id="deletePermanent" value="permanent" checked>
-                        <label class="form-check-label" for="deletePermanent">
-                            <strong>Exclusão permanente</strong> - Remove completamente do Google Drive
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="deleteOption" id="deleteTrash" value="trash">
-                        <label class="form-check-label" for="deleteTrash">
-                            <strong>Mover para lixeira</strong> - Pode ser restaurado posteriormente
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="deleteOption" id="deleteRecursive" value="recursive">
-                        <label class="form-check-label" for="deleteRecursive">
-                            <strong>Exclusão recursiva</strong> - Remove pasta e todo conteúdo (apenas pastas)
-                        </label>
-                    </div>
-                </div>
-                
-                <p class="text-danger mt-3"><i class="fas fa-exclamation-triangle"></i> A exclusão permanente não pode ser desfeita.</p>
+                <p class="text-danger mt-3"><i class="fas fa-exclamation-triangle"></i> Esta ação não pode ser desfeita.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-danger" onclick="deleteFile()">Excluir</button>
+                <button type="button" class="btn btn-danger" onclick="deleteFileFromModal()">Excluir</button>
             </div>
         </div>
     </div>
@@ -888,81 +864,209 @@ function moveFile() {
 }
 
 function showDeleteModal(id, name) {
-    $('#deleteFileId').val(id);
-    $('#deleteFileName').text(name);
+    console.log('showDeleteModal called with id:', id, 'name:', name);
     
-    // Verificar se é uma pasta baseado no nome do arquivo ou estrutura do DOM
-    const fileItem = $(`[data-id="${id}"], [data-file-id="${id}"]`);
-    const isFolder = fileItem.data('is-folder') === 'true' || fileItem.hasClass('file-folder');
-    
-    console.log('showDeleteModal - isFolder:', isFolder);
-    console.log('showDeleteModal - deleteRecursive element exists:', $('#deleteRecursive').length > 0);
-    
-    $('#deleteFileIsFolder').val(isFolder);
-    
-    // Mostrar ou esconder avisos de pasta
-    if (isFolder) {
-        $('#folderWarning').removeClass('d-none');
-        $('#recursiveWarning').removeClass('d-none');
-        // Por padrão, selecionar mover para lixeira para pastas
-        $('#deleteTrash').prop('checked', true);
-        $('#deletePermanent').prop('checked', false);
-        $('#deleteRecursive').prop('checked', false);
-        
-        console.log('showDeleteModal - Folder detected, showing recursive option');
-    } else {
-        $('#folderWarning').addClass('d-none');
-        $('#recursiveWarning').addClass('d-none');
-        // Por padrão, selecionar exclusão permanente para arquivos
-        $('#deletePermanent').prop('checked', true);
-        $('#deleteTrash').prop('checked', false);
-        $('#deleteRecursive').prop('checked', false);
-        
-        console.log('showDeleteModal - File detected, hiding recursive option');
-    }
-    
-    $('#deleteModal').modal('show');
-}
-
-function deleteFile() {
-    const id = $('#deleteFileId').val();
-    const isFolder = $('#deleteFileIsFolder').val();
-    const option = $('input[name="deleteOption"]:checked').val();
-
-    if (!option) {
-        toastr.error('Por favor, selecione uma opção de exclusão.');
-        return;
-    }
-
-    // Mostrar indicador de carregamento
-    toastr.info('Processando...');
-
-    let url;
-    let method = 'post';
-    let message = 'Arquivo processado com sucesso!';
-
-    if (option === 'permanent') {
-        // Exclusão permanente
-        url = window.location.origin + '/dashboard/files/' + id;
-        method = 'delete';
-        message = isFolder ? 'Pasta excluída com sucesso!' : 'Arquivo excluído com sucesso!';
-    } else if (option === 'recursive') {
-        // Exclusão recursiva (apenas para pastas)
-        if (!isFolder) {
-            toastr.error('A exclusão recursiva só é aplicável a pastas.');
+    try {
+        // Verificar se o modal existe
+        const modal = $('#deleteModal');
+        if (modal.length === 0) {
+            console.error('Modal não encontrado!');
+            toastr.error('Erro: Modal de exclusão não encontrado');
             return;
         }
-        url = window.location.origin + '/dashboard/files/delete-recursive/' + id;
-        method = 'post';
-        message = 'Pasta e todo seu conteúdo foram excluídos com sucesso!';
-    } else {
-        // Mover para lixeira
-        url = window.location.origin + '/dashboard/files/' + id + '/move-to-trash';
-        method = 'post';
-        message = isFolder ? 'Pasta movida para lixeira com sucesso!' : 'Arquivo movido para lixeira com sucesso!';
+        
+        console.log('Modal encontrado, configurando...');
+        
+        // Configurar campos do modal
+        $('#deleteFileId').val(id);
+        $('#deleteFileName').text(name);
+        
+        // Verificar se é uma pasta baseado no nome do arquivo ou estrutura do DOM
+        const fileItem = $(`[data-id="${id}"], [data-file-id="${id}"]`);
+        let isFolder = false;
+        
+        // Verificar se é uma pasta de várias formas
+        if (fileItem.length > 0) {
+            isFolder = fileItem.data('is-folder') === 'true' || 
+                      fileItem.hasClass('file-folder') ||
+                      fileItem.closest('tr').hasClass('file-folder');
+        }
+        
+        // Fallback: verificar pelo nome (se contém extensão, provavelmente é arquivo)
+        if (!isFolder && name) {
+            const hasExtension = name.includes('.');
+            isFolder = !hasExtension;
+        }
+        
+        console.log('showDeleteModal - isFolder:', isFolder);
+        console.log('showDeleteModal - fileItem:', fileItem);
+        console.log('showDeleteModal - fileItem classes:', fileItem.attr('class'));
+        console.log('showDeleteModal - deleteRecursive element exists:', $('#deleteRecursive').length > 0);
+        
+        $('#deleteFileIsFolder').val(isFolder);
+        
+        // Sempre mostrar o aviso de exclusão
+        $('#recursiveWarning').show();
+        
+        console.log('Tentando exibir modal...');
+        
+        // Tentar exibir o modal usando jQuery (mais compatível)
+        try {
+            console.log('Tentando jQuery modal...');
+            modal.modal('show');
+            console.log('Modal exibido com jQuery!');
+        } catch (jqueryError) {
+            console.log('jQuery modal failed, trying Bootstrap 5...', jqueryError);
+            
+            try {
+                // Fallback para Bootstrap 5
+                console.log('Tentando Bootstrap 5 modal...');
+                const modalInstance = new bootstrap.Modal(modal[0]);
+                modalInstance.show();
+                console.log('Modal exibido com Bootstrap 5!');
+            } catch (bootstrapError) {
+                console.log('Bootstrap 5 também falhou, tentando fallback direto...', bootstrapError);
+                
+                // Último recurso: mostrar o modal diretamente
+                try {
+                    modal.show();
+                    modal.addClass('show');
+                    modal.attr('style', 'display: block !important; background-color: rgba(0,0,0,0.5) !important;');
+                    modal.find('.modal-dialog').addClass('show');
+                    console.log('Modal exibido com fallback direto!');
+                } catch (fallbackError) {
+                    console.error('Todos os métodos falharam:', fallbackError);
+                    toastr.error('Erro ao exibir modal. Tente recarregar a página.');
+                }
+            }
+        }
+        
+        console.log('Modal exibido com sucesso!');
+        
+
+        
+            } catch (error) {
+            console.error('Erro ao exibir modal:', error);
+            toastr.error('Erro ao exibir modal de exclusão: ' + error.message);
+            
+            // Fallback: mostrar confirmação inline
+            console.log('Tentando fallback inline...');
+            showInlineDeleteConfirmation(id, name, isFolder);
+        }
+    }
+    
+    // Função de fallback para quando o modal não funciona
+    function showInlineDeleteConfirmation(id, name, isFolder) {
+        console.log('Mostrando confirmação inline para:', name, 'isFolder:', isFolder);
+        
+        let message = `Tem certeza que deseja excluir "${name}"?\n\n`;
+        
+        if (isFolder) {
+            message += `ATENÇÃO: Esta é uma pasta!\n`;
+            message += `- Para pasta vazia: Use "Exclusão permanente"\n`;
+            message += `- Para pasta com conteúdo: Use "Exclusão recursiva"\n\n`;
+            message += `Escolha uma opção:\n`;
+            message += `1. Exclusão permanente\n`;
+            message += `2. Mover para lixeira\n`;
+            message += `3. Exclusão recursiva (recomendado para pastas com conteúdo)\n`;
+            message += `4. Cancelar`;
+            
+            const choice = prompt(message, '3');
+            
+            switch(choice) {
+                case '1':
+                    deleteFileDirectly(id, 'permanent');
+                    break;
+                case '2':
+                    deleteFileDirectly(id, 'trash');
+                    break;
+                case '3':
+                    deleteFileDirectly(id, 'recursive');
+                    break;
+                case '4':
+                default:
+                    console.log('Operação cancelada pelo usuário');
+                    break;
+            }
+        } else {
+            message += `Escolha uma opção:\n`;
+            message += `1. Exclusão permanente\n`;
+            message += `2. Mover para lixeira\n`;
+            message += `3. Cancelar`;
+            
+            const choice = prompt(message, '1');
+            
+            switch(choice) {
+                case '1':
+                    deleteFileDirectly(id, 'permanent');
+                    break;
+                case '2':
+                    deleteFileDirectly(id, 'trash');
+                    break;
+                case '3':
+                default:
+                    console.log('Operação cancelada pelo usuário');
+                    break;
+            }
+        }
+    }
+    
+    // Função para deletar arquivo diretamente
+    function deleteFileDirectly(id, option) {
+        console.log('Deletando arquivo diretamente:', id, 'opção:', option);
+        
+        let url;
+        let method = 'post';
+        
+        if (option === 'permanent') {
+            url = window.location.origin + '/dashboard/files/' + id;
+            method = 'delete';
+        } else if (option === 'recursive') {
+            url = window.location.origin + '/dashboard/files/delete-recursive/' + id;
+            method = 'post';
+        } else if (option === 'trash') {
+            url = window.location.origin + '/dashboard/files/' + id + '/move-to-trash';
+            method = 'post';
+        }
+        
+        console.log('Enviando requisição para:', url, 'método:', method);
+        
+        $.ajax({
+            method: method,
+            url: url,
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            }
+        })
+        .then(response => {
+            if (response.success) {
+                toastr.success(response.message || 'Arquivo processado com sucesso!');
+                location.reload();
+            } else {
+                toastr.error(response.message || 'Erro ao processar arquivo');
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao processar arquivo:', error);
+            toastr.error('Erro ao processar arquivo: ' + (error.responseJSON?.message || error.statusText));
+        });
     }
 
-    axios({
+function deleteFileFromModal() {
+    const id = $('#deleteFileId').val();
+    const isFolder = $('#deleteFileIsFolder').val();
+
+    // Mostrar indicador de carregamento
+    toastr.info('Processando exclusão...');
+
+    // Sempre usar exclusão recursiva (funciona para arquivos e pastas)
+    const url = window.location.origin + '/dashboard/files/delete-recursive/' + id;
+    const method = 'post';
+    const message = 'Item excluído com sucesso!';
+
+    console.log('Modal delete - Enviando requisição:', { url, method, isFolder });
+
+    $.ajax({
         method: method,
         url: url,
         headers: {
@@ -970,18 +1074,19 @@ function deleteFile() {
         }
     })
     .then(response => {
-        if (response.data.success) {
-            toastr.success(response.data.message || message);
+        console.log('Modal delete - Resposta:', response);
+        if (response.success) {
+            toastr.success(response.message || message);
             $('#deleteModal').modal('hide');
             location.reload();
         } else {
-            toastr.error(response.data.message || 'Erro ao processar arquivo');
+            toastr.error(response.message || 'Erro ao processar arquivo');
             $('#deleteModal').modal('hide');
         }
     })
     .catch(error => {
-        console.error('Erro ao processar arquivo:', error);
-        toastr.error(error.response?.data?.message || 'Erro ao processar arquivo');
+        console.error('Modal delete - Erro:', error);
+        toastr.error('Erro ao processar arquivo: ' + (error.responseJSON?.message || error.statusText));
         $('#deleteModal').modal('hide');
     });
 }
@@ -1513,5 +1618,11 @@ function syncAllFiles() {
         button.innerHTML = originalText;
     });
 }
+
+// Test function for modal
+window.testModal = function() {
+    console.log('Testing modal...');
+    showDeleteModal('test-123', 'Arquivo de Teste');
+};
 </script>
 @endpush 

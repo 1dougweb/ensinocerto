@@ -1538,7 +1538,7 @@
                 success: function(response) {
                     console.log('AJAX success response:', response);
                     if (response.success) {
-                        studentFolderId = response.folder.id;
+                        studentFolderId = response.folder.file_id;
                         console.log('Student folder ID set to:', studentFolderId);
                         
                         driveElements.googleDriveFolderId.val(studentFolderId);
@@ -1662,10 +1662,7 @@
                             driveElements.filesList.append(fileItem);
                         });
 
-                        // Add delete file handler
-                        $('.delete-file').on('click', handleDeleteFile);
-                        // Add share file handler
-                        $('.share-file').on('click', handleShareFile);
+                        // Event handlers are now delegated globally
                         driveElements.fileCount.text(response.files.length);
                     } else {
                         console.log('No files found');
@@ -1696,42 +1693,96 @@
 
         function handleDeleteFile(e) {
             e.preventDefault();
-            const fileId = $(this).data('id');
-            if (!fileId || !confirm('Tem certeza que deseja excluir este arquivo?')) return;
-
-            console.log('Deleting file:', fileId);
-
-            $.ajax({
-                url: '{{ url("dashboard/files") }}/' + fileId,
-                method: 'DELETE',
-                success: function(response) {
-                    console.log('Delete response:', response);
-                    if (response.success) {
-                        console.log('File deleted successfully, reloading files...');
-                        // Aguardar um pouco antes de recarregar
-                        setTimeout(function() {
-                            loadFiles();
-                        }, 500);
-                        toastr.success('Arquivo excluído com sucesso!');
-                    } else {
-                        console.error('Delete error response:', response);
-                        toastr.error('Erro ao excluir arquivo: ' + (response.message || 'Erro desconhecido'));
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Delete error:', { status, error, response: xhr.responseText });
-                    let errorMessage = 'Erro ao excluir arquivo.';
-                    try {
-                        const errorResponse = JSON.parse(xhr.responseText);
-                        if (errorResponse.message) {
-                            errorMessage = errorResponse.message;
-                        }
-                    } catch (e) {
-                        // Se não conseguir parsear o JSON, usar a mensagem padrão
-                    }
-                    toastr.error(errorMessage);
+            
+            try {
+                const fileId = $(this).data('id');
+                console.log('Delete file clicked, fileId:', fileId, 'this:', this);
+                
+                if (!fileId) {
+                    console.error('No file ID found in data attribute');
+                    toastr.error('Erro: ID do arquivo não encontrado');
+                    return;
                 }
-            });
+                
+                if (!confirm('Tem certeza que deseja excluir este arquivo?')) {
+                    return;
+                }
+
+                console.log('Deleting file with ID:', fileId);
+
+                // Teste da rota primeiro
+                console.log('Testing route access...');
+                
+                $.ajax({
+                    url: '/dashboard/files/' + fileId,
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                        'Accept': 'application/json'
+                    },
+                    beforeSend: function() {
+                        console.log('Sending DELETE request to:', '/dashboard/files/' + fileId);
+                        console.log('CSRF Token:', $('meta[name="csrf-token"]').attr('content'));
+                    },
+                    success: function(response) {
+                        console.log('Delete response:', response);
+                        if (response.success) {
+                            console.log('File deleted successfully, reloading files...');
+                            toastr.success('Arquivo excluído com sucesso!');
+                            // Aguardar um pouco antes de recarregar
+                            setTimeout(function() {
+                                loadFiles();
+                            }, 500);
+                        } else {
+                            console.error('Delete error response:', response);
+                            toastr.error('Erro ao excluir arquivo: ' + (response.message || 'Erro desconhecido'));
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Delete AJAX error:', { 
+                            status: status, 
+                            error: error, 
+                            response: xhr.responseText,
+                            xhr: xhr,
+                            readyState: xhr.readyState,
+                            statusText: xhr.statusText
+                        });
+                        
+                        let errorMessage = 'Erro ao excluir arquivo.';
+                        
+                        // Verificar se é erro de CSRF
+                        if (xhr.status === 419) {
+                            errorMessage = 'Erro de CSRF. Página expirou. Recarregue a página.';
+                            console.error('CSRF token mismatch or expired');
+                        }
+                        // Verificar se é erro de permissão
+                        else if (xhr.status === 403) {
+                            errorMessage = 'Você não tem permissão para excluir este arquivo.';
+                            console.error('Permission denied');
+                        }
+                        // Verificar se é erro de não encontrado
+                        else if (xhr.status === 404) {
+                            errorMessage = 'Arquivo não encontrado.';
+                            console.error('File not found');
+                        }
+                        else {
+                            try {
+                                const errorResponse = JSON.parse(xhr.responseText);
+                                if (errorResponse.message) {
+                                    errorMessage = errorResponse.message;
+                                }
+                            } catch (parseError) {
+                                console.warn('Could not parse error response:', parseError);
+                            }
+                        }
+                        
+                        toastr.error(errorMessage);
+                    }
+                });
+            } catch (error) {
+                console.error('Error in handleDeleteFile:', error);
+                toastr.error('Erro interno ao processar exclusão: ' + error.message);
+            }
         }
 
         // Sharing Functions
@@ -2133,6 +2184,10 @@
             }
         });
 
+        // Global event delegation for dynamic content
+        $(document).on('click', '.delete-file', handleDeleteFile);
+        $(document).on('click', '.share-file', handleShareFile);
+        
         // Load folders on page load
         loadAvailableFolders();
         
@@ -2161,6 +2216,36 @@
                 },
                 error: function(xhr, status, error) {
                     console.error('API Error:', { status, error, response: xhr.responseText });
+                }
+            });
+        };
+
+        // Debug function to test user permissions
+        window.debugUserPermissions = function() {
+            console.log('Testing user permissions...');
+            
+            $.ajax({
+                url: '{{ route("admin.files.index") }}',
+                method: 'GET',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                    'Accept': 'application/json'
+                },
+                success: function(response) {
+                    console.log('Permission test successful:', response);
+                },
+                error: function(xhr, status, error) {
+                    console.error('Permission test failed:', { 
+                        status: status, 
+                        error: error, 
+                        response: xhr.responseText 
+                    });
+                    
+                    if (xhr.status === 403) {
+                        console.error('User does not have google-drive.index permission');
+                    } else if (xhr.status === 419) {
+                        console.error('CSRF token issue');
+                    }
                 }
             });
         };

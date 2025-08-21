@@ -80,8 +80,8 @@ class GoogleDriveFileController extends Controller
         try {
             $file = $this->driveService->uploadFile(
                 $request->file('file'),
-                $request->folder_id,
-                Auth::id()
+                Auth::id(),
+                $request->folder_id
             );
 
             return response()->json([
@@ -110,8 +110,8 @@ class GoogleDriveFileController extends Controller
         try {
             $folder = $this->driveService->createFolder(
                 $request->name,
-                $request->parent_id,
-                Auth::id()
+                Auth::id(),
+                $request->parent_id
             );
 
             return response()->json([

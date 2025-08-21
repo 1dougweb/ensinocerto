@@ -41,7 +41,7 @@ class TestGoogleDriveAccess extends Command
             // Teste 2: Criar pasta de teste
             $this->info('2. Testando criação de pasta...');
             $testFolderName = 'teste_' . date('Y-m-d_H-i-s');
-            $folder = $driveService->createFolder($testFolderName, null, 1);
+            $folder = $driveService->createFolder($testFolderName, 1, null);
             $this->info("   ✓ Pasta criada: {$folder->name} (ID: {$folder->file_id})");
             
             // Teste 3: Criar arquivo de teste
@@ -58,7 +58,7 @@ class TestGoogleDriveAccess extends Command
                 true
             );
             
-            $file = $driveService->uploadFile($uploadedFile, $folder->id, 1);
+            $file = $driveService->uploadFile($uploadedFile, 1, $folder->id);
             $this->info("   ✓ Arquivo enviado: {$file->name} (ID: {$file->file_id})");
             
             // Teste 4: Deletar arquivo de teste

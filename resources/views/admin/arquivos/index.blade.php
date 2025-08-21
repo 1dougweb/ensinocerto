@@ -303,34 +303,21 @@
                 <input type="hidden" id="deleteFileId">
                 <input type="hidden" id="deleteFileIsFolder">
                 <p>Tem certeza que deseja excluir <strong id="deleteFileName"></strong>?</p>
+                <p class="text-muted">Esta ação excluirá o item permanentemente do Google Drive.</p>
                 
-                <!-- Mensagem específica para pastas -->
-                <div id="folderWarning" class="alert alert-warning d-none">
+                <!-- Aviso de exclusão -->
+                <div id="recursiveWarning" class="alert alert-danger">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <strong>Atenção:</strong> Esta é uma pasta. Pastas só podem ser excluídas se estiverem vazias.
+                    <strong>Atenção:</strong> Esta operação excluirá o item permanentemente!
                 </div>
                 
-                <!-- Opções de exclusão -->
-                <div class="mt-3">
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="deleteOption" id="deletePermanent" value="permanent" checked>
-                        <label class="form-check-label" for="deletePermanent">
-                            <strong>Exclusão permanente</strong> - Remove completamente do Google Drive
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="deleteOption" id="deleteTrash" value="trash">
-                        <label class="form-check-label" for="deleteTrash">
-                            <strong>Mover para lixeira</strong> - Pode ser restaurado posteriormente
-                        </label>
-                    </div>
-                </div>
+                <p class="text-danger mt-3"><i class="fas fa-exclamation-triangle"></i> Esta ação não pode ser desfeita.</p>
                 
-                <p class="text-danger mt-3"><i class="fas fa-exclamation-triangle"></i> A exclusão permanente não pode ser desfeita.</p>
+
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-danger" onclick="deleteFile()">Excluir</button>
+                <button type="button" class="btn btn-danger" onclick="deleteFileFromModal()">Excluir</button>
             </div>
         </div>
     </div>
@@ -651,80 +638,67 @@ function showDeleteModal(id, name) {
     
     // Verificar se é uma pasta baseado no nome do arquivo ou estrutura do DOM
     const fileItem = $(`[data-id="${id}"], [data-file-id="${id}"]`);
-    const isFolder = fileItem.data('is-folder') === 'true' || fileItem.hasClass('file-folder');
+    let isFolder = false;
+    
+    if (fileItem.length > 0) {
+        isFolder = fileItem.data('is-folder') === 'true' || 
+                  fileItem.hasClass('file-folder') ||
+                  fileItem.closest('tr').hasClass('file-folder');
+    }
+    
+    // Fallback: verificar pelo nome (se contém extensão, provavelmente é arquivo)
+    if (!isFolder && name) {
+        const hasExtension = name.includes('.');
+        isFolder = !hasExtension;
+    }
     
     $('#deleteFileIsFolder').val(isFolder);
     
-    // Mostrar ou esconder aviso de pasta
-    if (isFolder) {
-        $('#folderWarning').removeClass('d-none');
-        // Por padrão, selecionar mover para lixeira para pastas
-        $('#deleteTrash').prop('checked', true);
-        $('#deletePermanent').prop('checked', false);
-    } else {
-        $('#folderWarning').addClass('d-none');
-        // Por padrão, selecionar exclusão permanente para arquivos
-        $('#deletePermanent').prop('checked', true);
-        $('#deleteTrash').prop('checked', false);
-    }
+    // Sempre mostrar o aviso de exclusão
+    $('#recursiveWarning').show();
     
     $('#deleteModal').modal('show');
 }
 
-function deleteFile() {
+function deleteFileFromModal() {
     const id = $('#deleteFileId').val();
     const isFolder = $('#deleteFileIsFolder').val();
-    const option = $('input[name="deleteOption"]:checked').val();
-
-    if (!option) {
-        toastr.error('Por favor, selecione uma opção de exclusão.');
-        return;
-    }
-
-    console.log('deleteFile called with id:', id, 'isFolder:', isFolder, 'option:', option);
 
     // Mostrar indicador de carregamento
-    toastr.info('Processando...');
+    toastr.info('Processando exclusão...');
 
-    let url;
-    let method = 'post';
-    let message = 'Arquivo processado com sucesso!';
+    // Sempre usar exclusão recursiva (funciona para arquivos e pastas)
+    const url = '{{ route("admin.files.delete-recursive", ["id" => "PLACEHOLDER"]) }}'.replace('PLACEHOLDER', id);
+    const method = 'post';
+    const message = 'Item excluído com sucesso!';
 
-    if (option === 'permanent') {
-        // Exclusão permanente
-        url = '{{ route("admin.files.destroy", ["id" => "PLACEHOLDER"]) }}'.replace('PLACEHOLDER', id);
-        method = 'delete';
-        message = isFolder ? 'Pasta excluída com sucesso!' : 'Arquivo excluído com sucesso!';
-    } else {
-        // Mover para lixeira
-        url = '{{ route("admin.files.move-to-trash", ["id" => "PLACEHOLDER"]) }}'.replace('PLACEHOLDER', id);
-        method = 'post';
-        message = isFolder ? 'Pasta movida para lixeira com sucesso!' : 'Arquivo movido para lixeira com sucesso!';
-    }
 
-    axios({
-        method: method,
+
+    $.ajax({
+        method: 'POST',
         url: url,
         headers: {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
         }
     })
     .then(response => {
-        if (response.data.success) {
-            toastr.success(response.data.message || message);
+        if (response.success) {
+            toastr.success(response.message || message);
             $('#deleteModal').modal('hide');
             location.reload();
         } else {
-            toastr.error(response.data.message || 'Erro ao processar arquivo');
+            toastr.error(response.message || 'Erro ao processar arquivo');
             $('#deleteModal').modal('hide');
         }
     })
     .catch(error => {
-        console.error('Erro ao processar arquivo:', error);
-        toastr.error(error.response?.data?.message || 'Erro ao processar arquivo');
+        console.error('Erro na requisição AJAX:', error);
+        toastr.error('Erro ao processar arquivo: ' + (error.responseJSON?.message || error.statusText));
         $('#deleteModal').modal('hide');
     });
 }
+
+
 
 function downloadFile(id) {
     // Redirecionar diretamente para o download

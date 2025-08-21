@@ -49,7 +49,7 @@ class TestServiceAccountUpload extends Command
             $this->info('Fazendo upload do arquivo de teste...');
             
             // Fazer upload (usando ID 1 como usuário padrão)
-            $result = $driveService->uploadFile($uploadedFile, null, 1);
+            $result = $driveService->uploadFile($uploadedFile, 1, null);
             
             if ($result) {
                 $this->info('✅ Upload realizado com sucesso!');

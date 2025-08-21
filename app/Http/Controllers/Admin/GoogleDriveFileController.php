@@ -311,8 +311,8 @@ class GoogleDriveFileController extends Controller
             \Log::info('GoogleDriveFileController::store - Chamando driveService->uploadFile');
             $file = $this->driveService->uploadFile(
                 $request->file('file'),
-                $validFolderId,
-                Auth::id()
+                Auth::id(),
+                $validFolderId
             );
 
             \Log::info('GoogleDriveFileController::store - Upload concluído com sucesso', [
@@ -361,8 +361,8 @@ class GoogleDriveFileController extends Controller
 
             $folder = $this->driveService->createFolder(
                 $request->name,
-                $googleDriveParentId,
-                Auth::id()
+                Auth::id(),
+                $googleDriveParentId
             );
 
             return response()->json([
@@ -556,7 +556,7 @@ class GoogleDriveFileController extends Controller
     }
 
     /**
-     * Excluir pasta recursivamente (incluindo todo o conteúdo)
+     * Excluir arquivo ou pasta (recursivamente para pastas)
      */
     public function destroyRecursive(Request $request, $id)
     {
@@ -581,52 +581,81 @@ class GoogleDriveFileController extends Controller
                 $file = GoogleDriveFile::findOrFail($id);
             }
             
-            \Log::info('Arquivo encontrado para exclusão recursiva', [
+            \Log::info('Item encontrado para exclusão', [
                 'id' => $file->id,
                 'file_id' => $file->file_id,
                 'name' => $file->name,
                 'is_folder' => $file->is_folder
             ]);
             
-            // Verificar se é uma pasta
-            if (!$file->is_folder) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'A exclusão recursiva só é aplicável a pastas.'
-                ], 400);
-            }
-            
-            try {
-                // Excluir recursivamente no Google Drive
-                $result = $this->driveService->deleteRecursive($file->file_id);
-                
-                if ($result) {
-                    // Excluir do banco de dados local
-                    $file->delete();
+            // Para arquivos, usar exclusão simples; para pastas, usar exclusão recursiva
+            if ($file->is_folder) {
+                // É uma pasta - usar exclusão recursiva
+                try {
+                    $result = $this->driveService->deleteRecursive($file->file_id);
+                    
+                    if ($result) {
+                        // Excluir do banco de dados local
+                        $file->delete();
+                        
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Pasta e todo seu conteúdo foram excluídos com sucesso!'
+                        ]);
+                    }
                     
                     return response()->json([
-                        'success' => true,
-                        'message' => 'Pasta e todo seu conteúdo foram excluídos com sucesso!'
+                        'success' => false,
+                        'message' => 'Erro ao excluir pasta recursivamente'
+                    ], 500);
+                    
+                } catch (\Exception $e) {
+                    \Log::error('GoogleDriveFileController::destroyRecursive - Erro ao excluir pasta recursivamente', [
+                        'file_id' => $file->file_id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
                     ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => $e->getMessage()
+                    ], 500);
                 }
-                
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Erro ao excluir pasta recursivamente'
-                ], 500);
-                
-            } catch (\Exception $e) {
-                \Log::error('GoogleDriveFileController::destroyRecursive - Erro ao excluir pasta recursivamente', [
-                    'file_id' => $file->file_id,
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-                
-                return response()->json([
-                    'success' => false,
-                    'message' => $e->getMessage()
-                ], 500);
+            } else {
+                // É um arquivo - usar exclusão simples
+                try {
+                    $result = $this->driveService->delete($file->file_id);
+                    
+                    if ($result) {
+                        // Excluir do banco de dados local
+                        $file->delete();
+                        
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Arquivo excluído com sucesso!'
+                        ]);
+                    }
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Erro ao excluir arquivo'
+                    ], 500);
+                    
+                } catch (\Exception $e) {
+                    \Log::error('GoogleDriveFileController::destroyRecursive - Erro ao excluir arquivo', [
+                        'file_id' => $file->file_id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => $e->getMessage()
+                    ], 500);
+                }
             }
+            
+
             
         } catch (\Exception $e) {
             \Log::error('GoogleDriveFileController::destroyRecursive - Erro externo', [
@@ -1393,8 +1422,8 @@ class GoogleDriveFileController extends Controller
         try {
             $folder = $this->driveService->createFolder(
                 $request->name,
-                null, // Criar na raiz
-                Auth::id()
+                Auth::id(),
+                null // Criar na raiz
             );
 
             return response()->json([

@@ -882,8 +882,8 @@ class MatriculaController extends Controller
             
             $folder = $this->driveService->createFolder(
                 $folderName,
-                $googleDriveParentId,
-                Auth::id()
+                Auth::id(),
+                $googleDriveParentId
             );
 
             // Atualizar a matrícula com o ID da pasta
