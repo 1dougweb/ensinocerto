@@ -308,21 +308,7 @@
             box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
         }
         
-        /* Estilos para o botão de limpar formulário */
-        .clear-form-btn {
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.2s ease;
-        }
-        
-        .clear-form-btn:hover {
-            background-color: #5a6268;
-        }
+
         
         /* Estilos para indicador de carregamento */
         .fa-spinner {
@@ -568,7 +554,7 @@
                             </div>
             @endif
                         
-                        <button type="submit" class="btn btn-submit"><i class="fab fa-whatsapp me-2"></i>Quero me inscrever</button>
+                        <button type="submit" class="btn btn-submit"></i>Quero me inscrever</button>
                     </form>
                 </div>
             </div>
@@ -623,7 +609,7 @@
                     </div>
                     
                     <div class="cta-highlight">
-                        <a href="#oferta" class="btn btn-lg btn-cta"><i class="fab fa-whatsapp me-2"></i>Quero terminar o ensino médio</a>
+                        <a href="#oferta" class="btn btn-lg btn-cta gap-2"><i class="fab fa-whatsapp"></i>Quero terminar o ensino médio</a>
                     </div>
                 </div>
             </div>
@@ -1067,21 +1053,7 @@
                         messageDiv.innerHTML = data.message;
                         messageDiv.style.display = 'block';
                         
-                        // Adicionar botão para limpar formulário
-                        if (!form.querySelector('.clear-form-btn')) {
-                            const clearBtn = document.createElement('button');
-                            clearBtn.type = 'button';
-                            clearBtn.className = 'btn btn-secondary clear-form-btn';
-                            clearBtn.innerHTML = '<i class="fas fa-eraser"></i> Limpar formulário';
-                            clearBtn.style.marginTop = '10px';
-                            clearBtn.onclick = function() {
-                                form.reset();
-                                messageDiv.style.display = 'none';
-                                clearBtn.remove();
-                            };
-                            messageDiv.appendChild(document.createElement('br'));
-                            messageDiv.appendChild(clearBtn);
-                        }
+
                         
                         // Tracking do evento
                         if (typeof gtag !== 'undefined') {
