@@ -44,8 +44,19 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Tracking Scripts -->
-    @include('components.tracking-scripts')
+    <!-- Tracking Scripts (GTM Geral) -->
+    @if(!($landingSettings['gtm_enabled'] ?? false) || empty($landingSettings['gtm_id']))
+        @include('components.tracking-scripts')
+    @else
+        <!-- GTM Geral desabilitado - usando GTM específico da landing page -->
+        <script>
+            // Criar um dataLayer simulado para compatibilidade
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push = function(obj) {
+                Array.prototype.push.call(this, obj);
+            };
+        </script>
+    @endif
     
     <!-- Google Tag Manager para Landing Page -->
     @if($landingSettings['gtm_enabled'] ?? false)
