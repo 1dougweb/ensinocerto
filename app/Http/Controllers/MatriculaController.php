@@ -22,11 +22,18 @@ class MatriculaController extends Controller
     /**
      * Construtor
      */
-    public function __construct(\App\Services\GoogleDriveService $driveService)
+    public function __construct()
     {
         $this->middleware('auth');
         $this->middleware('permission:matriculas.index');
-        $this->driveService = $driveService;
+        
+        // Tentar resolver o GoogleDriveService de forma segura
+        try {
+            $this->driveService = app(\App\Services\GoogleDriveService::class);
+        } catch (\Exception $e) {
+            \Log::warning('GoogleDriveService não pôde ser inicializado: ' . $e->getMessage());
+            $this->driveService = null;
+        }
     }
 
     /**
@@ -880,6 +887,13 @@ class MatriculaController extends Controller
                 }
             }
             
+            if (!$this->driveService) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Serviço do Google Drive não está disponível no momento.'
+                ], 503);
+            }
+            
             $folder = $this->driveService->createFolder(
                 $folderName,
                 Auth::id(),
@@ -948,24 +962,28 @@ class MatriculaController extends Controller
             // Se a pasta não existe no banco, tentar sincronizar primeiro
             if (!$currentFolder) {
                 \Log::info('MatriculaController::listDriveFiles - Pasta não encontrada no banco, sincronizando primeiro');
-                try {
-                    // Sincronizar a pasta raiz para garantir que todas as pastas sejam criadas no banco
-                    $this->driveService->listFiles();
-                    $currentFolder = \App\Models\GoogleDriveFile::where('file_id', $currentFolderId)->first();
-                    \Log::info('MatriculaController::listDriveFiles - Após sincronização, pasta encontrada: ' . ($currentFolder ? 'Sim' : 'Não'));
-                } catch (\Exception $e) {
-                    \Log::warning('Erro ao sincronizar pasta: ' . $e->getMessage());
+                if ($this->driveService) {
+                    try {
+                        // Sincronizar a pasta raiz para garantir que todas as pastas sejam criadas no banco
+                        $this->driveService->listFiles();
+                        $currentFolder = \App\Models\GoogleDriveFile::where('file_id', $currentFolderId)->first();
+                        \Log::info('MatriculaController::listDriveFiles - Após sincronização, pasta encontrada: ' . ($currentFolder ? 'Sim' : 'Não'));
+                    } catch (\Exception $e) {
+                        \Log::warning('Erro ao sincronizar pasta: ' . $e->getMessage());
+                    }
                 }
             }
             
             // Primeiro, sincronizar com o Google Drive para garantir dados atualizados
-            try {
-                \Log::info('MatriculaController::listDriveFiles - Sincronizando arquivos do Google Drive para pasta: ' . $currentFolderId);
-                $driveFiles = $this->driveService->listFiles($currentFolderId);
-                \Log::info('MatriculaController::listDriveFiles - Arquivos sincronizados: ' . count($driveFiles));
-            } catch (\Exception $e) {
-                \Log::warning('Erro ao sincronizar com Google Drive: ' . $e->getMessage());
-                $driveFiles = collect([]);
+            $driveFiles = collect([]);
+            if ($this->driveService) {
+                try {
+                    \Log::info('MatriculaController::listDriveFiles - Sincronizando arquivos do Google Drive para pasta: ' . $currentFolderId);
+                    $driveFiles = $this->driveService->listFiles($currentFolderId);
+                    \Log::info('MatriculaController::listDriveFiles - Arquivos sincronizados: ' . count($driveFiles));
+                } catch (\Exception $e) {
+                    \Log::warning('Erro ao sincronizar com Google Drive: ' . $e->getMessage());
+                }
             }
             
             // Buscar arquivos do banco de dados local

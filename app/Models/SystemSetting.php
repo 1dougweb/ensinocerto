@@ -597,6 +597,9 @@ class SystemSetting extends Model
             'chat_position' => self::get('landing_chat_position', 'bottom-right'),
             'chat_color' => self::get('landing_chat_color', '#007bff'),
             'chat_icon' => self::get('landing_chat_icon', 'fas fa-comments'),
+            'gtm_enabled' => self::get('landing_gtm_enabled', false),
+            'gtm_id' => self::get('landing_gtm_id', ''),
+            'gtm_events' => self::get('landing_gtm_events', ''),
         ];
     }
 

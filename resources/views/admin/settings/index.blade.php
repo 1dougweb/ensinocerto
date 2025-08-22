@@ -889,6 +889,61 @@ function saveSchoolSignature() {
                         </div>
                     </div>
                     
+                    <!-- Google Tag Manager - Landing Page -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="fab fa-google me-2"></i> Google Tag Manager - Landing Page</h6>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="landing_gtm_enabled" name="landing_gtm_enabled" value="1"
+                                           {{ old('landing_gtm_enabled', $landingSettings['gtm_enabled'] ?? false) ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="landing_gtm_enabled">Ativar</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Configure o Google Tag Manager especificamente para a landing page. Estas configurações são independentes das configurações gerais de tracking.
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="form-group mb-3">
+                                        <label for="landing_gtm_id" class="form-label">ID do GTM para Landing Page</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="landing_gtm_id" name="landing_gtm_id" 
+                                                   value="{{ old('landing_gtm_id', $landingSettings['gtm_id'] ?? '') }}"
+                                                   placeholder="GTM-XXXXXXX">
+                                            <button class="btn btn-outline-primary" type="button" id="validateLandingGTM">Validar</button>
+                                        </div>
+                                        <div class="form-text">ID específico do GTM para a landing page (ex: GTM-NPXJKW38)</div>
+                                        <div id="landing-gtm-validation-result" class="mt-2"></div>
+                                    </div>
+                                    
+                                    <div class="form-group mb-3">
+                                        <label for="landing_gtm_events" class="form-label">Eventos Personalizados</label>
+                                        <textarea class="form-control" id="landing_gtm_events" name="landing_gtm_events" rows="4" 
+                                                  placeholder="Configurações de eventos personalizados para GTM da landing page">{{ old('landing_gtm_events', $landingSettings['gtm_events'] ?? '') }}</textarea>
+                                        <div class="form-text">Configurações adicionais de eventos para o GTM da landing page (opcional)</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card h-100">
+                                        <div class="card-body bg-light">
+                                            <h6 class="card-title">GTM Landing Page</h6>
+                                            <p class="card-text small">Configure um container GTM específico para a landing page, independente das configurações gerais de tracking.</p>
+                                            <div class="alert alert-warning small">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                                <strong>Importante:</strong> Esta configuração sobrescreve o GTM geral apenas na landing page.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Teste de Tracking -->
                     <div class="card">
                         <div class="card-header bg-light">

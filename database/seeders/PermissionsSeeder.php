@@ -18,32 +18,27 @@ class PermissionsSeeder extends Seeder
         // Criar papéis básicos
         $adminRole = Role::create([
             'name' => 'Administrador',
-            'slug' => 'admin',
-            'description' => 'Acesso completo ao sistema',
+            'guard_name' => 'web',
         ]);
 
         $vendedorRole = Role::create([
             'name' => 'Vendedor',
-            'slug' => 'vendedor',
-            'description' => 'Acesso às funcionalidades de vendas',
+            'guard_name' => 'web',
         ]);
 
         $colaboradorRole = Role::create([
             'name' => 'Colaborador',
-            'slug' => 'colaborador',
-            'description' => 'Acesso básico ao sistema',
+            'guard_name' => 'web',
         ]);
 
         $midiaRole = Role::create([
             'name' => 'Mídia',
-            'slug' => 'midia',
-            'description' => 'Acesso às funcionalidades de mídia',
+            'guard_name' => 'web',
         ]);
 
         $parceiroRole = Role::create([
             'name' => 'Parceiro',
-            'slug' => 'parceiro',
-            'description' => 'Acesso às funcionalidades de parceiro',
+            'guard_name' => 'web',
         ]);
 
         // Definir módulos do sistema
@@ -66,81 +61,73 @@ class PermissionsSeeder extends Seeder
             // Permissão de visualização
             Permission::create([
                 'name' => "Ver {$moduleName}",
-                'slug' => "view_{$moduleSlug}",
-                'module' => $moduleSlug,
-                'description' => "Permite visualizar o módulo {$moduleName}",
+                'guard_name' => 'web',
             ]);
 
             // Permissão de criação
             Permission::create([
                 'name' => "Criar {$moduleName}",
-                'slug' => "create_{$moduleSlug}",
-                'module' => $moduleSlug,
-                'description' => "Permite criar no módulo {$moduleName}",
+                'guard_name' => 'web',
             ]);
 
             // Permissão de edição
             Permission::create([
                 'name' => "Editar {$moduleName}",
-                'slug' => "edit_{$moduleSlug}",
-                'module' => $moduleSlug,
-                'description' => "Permite editar no módulo {$moduleName}",
+                'guard_name' => 'web',
             ]);
 
             // Permissão de exclusão
             Permission::create([
                 'name' => "Excluir {$moduleName}",
-                'slug' => "delete_{$moduleSlug}",
-                'module' => $moduleSlug,
-                'description' => "Permite excluir no módulo {$moduleName}",
+                'guard_name' => 'web',
             ]);
         }
 
         // Atribuir todas as permissões ao papel de administrador
-        $adminRole->permissions()->attach(Permission::all());
+        $adminRole->givePermissionTo(Permission::all());
 
         // Atribuir permissões específicas ao papel de vendedor
-        $vendedorPermissions = Permission::whereIn('module', [
-            'dashboard', 'inscricoes', 'matriculas', 'contratos', 'parceiros', 'kanban', 'arquivos'
+        $vendedorPermissions = Permission::whereIn('name', [
+            'Ver Dashboard', 'Ver Inscrições', 'Ver Matrículas', 'Ver Contratos', 'Ver Parceiros', 'Ver Kanban', 'Ver Arquivos'
         ])->get();
-        $vendedorRole->permissions()->attach($vendedorPermissions);
+        $vendedorRole->givePermissionTo($vendedorPermissions);
 
         // Atribuir permissões específicas ao papel de mídia
-        $midiaPermissions = Permission::whereIn('module', [
-            'dashboard', 'inscricoes', 'relatorios'
+        $midiaPermissions = Permission::whereIn('name', [
+            'Ver Dashboard', 'Ver Inscrições', 'Ver Relatórios'
         ])->get();
-        $midiaRole->permissions()->attach($midiaPermissions);
+        $midiaRole->givePermissionTo($midiaPermissions);
 
         // Atribuir permissões específicas ao papel de colaborador
-        $colaboradorPermissions = Permission::whereIn('slug', [
-            'view_dashboard', 'view_inscricoes', 'view_matriculas'
+        $colaboradorPermissions = Permission::whereIn('name', [
+            'Ver Dashboard', 'Ver Inscrições', 'Ver Matrículas'
         ])->get();
-        $colaboradorRole->permissions()->attach($colaboradorPermissions);
+        $colaboradorRole->givePermissionTo($colaboradorPermissions);
 
         // Atribuir permissões específicas ao papel de parceiro
-        $parceiroPermissions = Permission::whereIn('slug', [
-            'view_dashboard', 'view_contratos', 'view_arquivos'
+        $parceiroPermissions = Permission::whereIn('name', [
+            'Ver Dashboard', 'Ver Contratos', 'Ver Arquivos'
         ])->get();
-        $parceiroRole->permissions()->attach($parceiroPermissions);
+        $parceiroRole->givePermissionTo($parceiroPermissions);
 
         // Atribuir papéis aos usuários existentes com base no tipo_usuario
         $users = User::all();
         foreach ($users as $user) {
             switch ($user->tipo_usuario) {
                 case 'admin':
-                    $user->roles()->attach($adminRole);
+                    $user->assignRole($adminRole);
                     break;
                 case 'vendedor':
-                    $user->roles()->attach($vendedorRole);
+                    $user->assignRole($vendedorRole);
                     break;
                 case 'colaborador':
-                    $user->roles()->attach($colaboradorRole);
+                    $user->assignRole($colaboradorRole);
                     break;
                 case 'midia':
-                    $user->roles()->attach($midiaRole);
+                    $user->assignRole($midiaRole);
                     break;
                 case 'parceiro':
-                    $user->roles()->attach($parceiroRole);
+                    $user->assignRole($parceiroRole);
                     break;
             }
         }

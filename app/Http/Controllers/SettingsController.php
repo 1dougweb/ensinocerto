@@ -234,6 +234,11 @@ class SettingsController extends Controller
             SystemSetting::set('landing_chat_color', $request->landing_chat_color, 'string', 'landing_page', 'Cor do botão do chat');
             SystemSetting::set('landing_chat_icon', $request->landing_chat_icon, 'string', 'landing_page', 'Ícone do chat de suporte');
             
+            // Configurações do Google Tag Manager para Landing Page
+            SystemSetting::set('landing_gtm_enabled', $request->has('landing_gtm_enabled'), 'boolean', 'landing_page', 'Ativar Google Tag Manager na landing page');
+            SystemSetting::set('landing_gtm_id', $request->landing_gtm_id, 'string', 'landing_page', 'ID do Google Tag Manager para landing page');
+            SystemSetting::set('landing_gtm_events', $request->landing_gtm_events, 'text', 'landing_page', 'Eventos personalizados do GTM para landing page');
+            
             // Processar upload das imagens do rodapé
             if ($request->hasFile('landing_footer_image_1')) {
                 $image1 = $request->file('landing_footer_image_1');
