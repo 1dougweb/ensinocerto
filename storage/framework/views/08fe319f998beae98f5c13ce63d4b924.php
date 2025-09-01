@@ -391,4 +391,4 @@ unset($__errorArgs, $__bag); ?>
     </script>
 </body>
 </html>
-<?php /**PATH C:\Users\Douglas\Documents\Projetos\ensinocerto\resources\views/auth/login.blade.php ENDPATH**/ ?>
+<?php /**PATH C:\Users\Douglas\Documents\Projetos\fix\resources\views/auth/login.blade.php ENDPATH**/ ?>

@@ -1,25 +1,19 @@
-@extends('layouts.admin')
+<?php $__env->startSection('title', 'Dashboard'); ?>
 
-@section('title', 'Dashboard')
+<?php $__env->startSection('page-title', 'Dashboard'); ?>
 
-@section('page-title', 'Dashboard')
-
-@section('page-actions')
+<?php $__env->startSection('page-actions'); ?>
     <div class="d-flex gap-2">
-        <a href="{{ route('admin.inscricoes') }}" class="btn btn-primary">
+        <a href="<?php echo e(route('admin.inscricoes')); ?>" class="btn btn-primary">
             <i class="fas fa-users me-2"></i>
             Ver Inscrições
         </a>
-        <a href="{{ route('admin.inscricoes.exportar') }}" class="btn btn-success">
+        <a href="<?php echo e(route('admin.inscricoes.exportar')); ?>" class="btn btn-success">
         <i class="fas fa-download me-2"></i>Exportar CSV</a>
-        <a href="{{ route('admin.analytics.dashboard') }}" class="btn btn-info">
-            <i class="fas fa-chart-line me-2"></i>
-            Analytics
-        </a>
     </div>
-@endsection
+<?php $__env->stopSection(); ?>
 
-@section('content')
+<?php $__env->startSection('content'); ?>
     <!-- Cards de Estatísticas -->
     <div class="row mb-4">
         <div class="col-xl-3 col-md-6 mb-4">
@@ -27,7 +21,7 @@
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center py-0">
                         <div>
-                            <div class="stats-number">{{ $totalInscricoes }}</div>
+                            <div class="stats-number"><?php echo e($totalInscricoes); ?></div>
                             <div class="stats-label">Total de Inscrições</div>
                         </div>
                         <div class="text-white-50">
@@ -43,7 +37,7 @@
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center py-0">
                         <div>
-                            <div class="stats-number">{{ $inscricoesHoje }}</div>
+                            <div class="stats-number"><?php echo e($inscricoesHoje); ?></div>
                             <div class="stats-label">Hoje</div>
                         </div>
                         <div class="text-white-50">
@@ -59,7 +53,7 @@
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center py-0">
                         <div>
-                            <div class="stats-number">{{ $inscricoesUltimos7Dias }}</div>
+                            <div class="stats-number"><?php echo e($inscricoesUltimos7Dias); ?></div>
                             <div class="stats-label">Últimos 7 dias</div>
                         </div>
                         <div class="text-white-50">
@@ -75,7 +69,7 @@
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center py-0">
                         <div>
-                            <div class="stats-number">{{ $inscricoesUltimos30Dias }}</div>
+                            <div class="stats-number"><?php echo e($inscricoesUltimos30Dias); ?></div>
                             <div class="stats-label">Últimos 30 dias</div>
                         </div>
                         <div class="text-white-50">
@@ -132,38 +126,39 @@
                     </h5>
                 </div>
                 <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                    @if($inscricoesRecentes->count() > 0)
+                    <?php if($inscricoesRecentes->count() > 0): ?>
                         <div class="list-group list-group-flush">
-                            @foreach($inscricoesRecentes as $inscricao)
+                            <?php $__currentLoopData = $inscricoesRecentes; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $inscricao): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <div class="list-group-item px-0 py-3 border-0 border-bottom">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
-                                            <h6 class="mb-1">{{ $inscricao->nome }}</h6>
-                                            <p class="mb-1 text-muted small">{{ $inscricao->email }}</p>
+                                            <h6 class="mb-1"><?php echo e($inscricao->nome); ?></h6>
+                                            <p class="mb-1 text-muted small"><?php echo e($inscricao->email); ?></p>
                                             <small class="text-muted">
-                                                <span class="badge bg-primary">{{ $availableCourses[$inscricao->curso] ?? $inscricao->curso }}</span>
-                                                <span class="badge bg-success">{{ $availableModalities[$inscricao->modalidade] ?? $inscricao->modalidade }}</span>
+                                                <span class="badge bg-primary"><?php echo e($availableCourses[$inscricao->curso] ?? $inscricao->curso); ?></span>
+                                                <span class="badge bg-success"><?php echo e($availableModalities[$inscricao->modalidade] ?? $inscricao->modalidade); ?></span>
                                             </small>
                                         </div>
                                         <small class="text-muted">
-                                            {{ $inscricao->created_at->diffForHumans() }}
+                                            <?php echo e($inscricao->created_at->diffForHumans()); ?>
+
                                         </small>
                                     </div>
                                 </div>
-                            @endforeach
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </div>
                         
                         <div class="text-center mt-3">
-                            <a href="{{ route('admin.inscricoes') }}" class="btn btn-outline-primary btn-sm">
+                            <a href="<?php echo e(route('admin.inscricoes')); ?>" class="btn btn-outline-primary btn-sm">
                                 Ver todas as inscrições
                             </a>
                         </div>
-                    @else
+                    <?php else: ?>
                         <div class="text-center py-4">
                             <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
                             <p class="text-muted">Nenhuma inscrição encontrada</p>
                         </div>
-                    @endif
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -211,20 +206,20 @@
     </div>
 
     
-@endsection
+<?php $__env->stopSection(); ?>
 
-@push('scripts')
+<?php $__env->startPush('scripts'); ?>
 <!-- Dashboard Charts JS -->
-<script src="{{ asset('assets/js/dashboard-charts.js') }}"></script>
+<script src="<?php echo e(asset('assets/js/dashboard-charts.js')); ?>"></script>
 
 <script>
 // Passar dados do PHP para JavaScript
 window.dashboardData = {
-    cursos: @json($estatisticasCursos ?? []),
-    modalidades: @json($estatisticasModalidade ?? []),
-    chartData: @json($chartData ?? []),
-    availableCourses: @json($availableCourses ?? []),
-    availableModalities: @json($availableModalities ?? [])
+    cursos: <?php echo json_encode($estatisticasCursos ?? [], 15, 512) ?>,
+    modalidades: <?php echo json_encode($estatisticasModalidade ?? [], 15, 512) ?>,
+    chartData: <?php echo json_encode($chartData ?? [], 15, 512) ?>,
+    availableCourses: <?php echo json_encode($availableCourses ?? [], 15, 512) ?>,
+    availableModalities: <?php echo json_encode($availableModalities ?? [], 15, 512) ?>
 };
 
 console.log('📋 Dashboard data loaded:', window.dashboardData);
@@ -351,4 +346,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-@endpush 
+<?php $__env->stopPush(); ?> 
+<?php echo $__env->make('layouts.admin', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH /home/u760830176/domains/ensinocerto.com.br/public_html/resources/views/admin/dashboard.blade.php ENDPATH**/ ?>

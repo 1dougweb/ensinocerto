@@ -681,7 +681,7 @@ unset($__errorArgs, $__bag); ?>
                     </div>
                     
                     <div class="cta-highlight">
-                        <a href="#oferta" class="btn btn-lg btn-cta gap-2"><i class="fab fa-whatsapp"></i>Quero terminar o ensino médio</a>
+                        <a href="https://wa.me/5511917012033?text=Ol%C3%A1%21+Tenho+interesse+no+curso+EJA.+Podem+me+ajudar%3F" class="btn btn-lg btn-cta gap-2" target="_blank"><i class="fab fa-whatsapp"></i> Quero terminar o ensino médio</a>
                     </div>
                 </div>
             </div>
@@ -1907,4 +1907,4 @@ unset($__errorArgs, $__bag); ?>
     
     </body>
 </html>
-<?php /**PATH C:\Users\Douglas\Documents\Projetos\ensinocerto\resources\views/welcome.blade.php ENDPATH**/ ?>
+<?php /**PATH C:\Users\Douglas\Documents\Projetos\fix\resources\views/welcome.blade.php ENDPATH**/ ?>

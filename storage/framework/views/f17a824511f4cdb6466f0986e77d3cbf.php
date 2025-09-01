@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Painel Administrativo') - EJA Supletivo</title>
+    <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
+    <title><?php echo $__env->yieldContent('title', 'Painel Administrativo'); ?> - EJA Supletivo</title>
     
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -18,19 +18,19 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
     
     <!-- Admin Settings CSS -->
-    <link rel="stylesheet" href="{{ asset('assets/css/admin-settings.css') }}">
+    <link rel="stylesheet" href="<?php echo e(asset('assets/css/admin-settings.css')); ?>">
     
     <!-- Charts CSS -->
-    <link rel="stylesheet" href="{{ asset('assets/css/charts.css') }}">
+    <link rel="stylesheet" href="<?php echo e(asset('assets/css/charts.css')); ?>">
     
     <!-- Tracking Scripts -->
-    @include('components.tracking-scripts')
+    <?php echo $__env->make('components.tracking-scripts', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     
     <!-- SortableJS -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     
     <!-- Stack para estilos customizados -->
-    @stack('styles')
+    <?php echo $__env->yieldPushContent('styles'); ?>
     
     <style>
         :root {
@@ -40,11 +40,11 @@
             --transition-curve: cubic-bezier(0.215, 0.610, 0.355, 1.000);
             --sidebar-color: #5a2d91!important;
             --sidebar-hover: #3a3a7c;
-            --sidebar-color: {{ $currentTheme['primary_color'] ?? '#4a4a9c' }};
+            --sidebar-color: <?php echo e($currentTheme['primary_color'] ?? '#4a4a9c'); ?>;
             --sidebar-hover:#3A5998;
-            --theme-background: {{ $currentTheme['background'] ?? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }};
-            --theme-card-bg: {{ $currentTheme['card_bg'] ?? 'rgba(255, 255, 255, 0.95)' }};
-            --theme-shadow: {{ $currentTheme['shadow'] ?? '0 8px 32px rgba(102, 126, 234, 0.3)' }};
+            --theme-background: <?php echo e($currentTheme['background'] ?? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'); ?>;
+            --theme-card-bg: <?php echo e($currentTheme['card_bg'] ?? 'rgba(255, 255, 255, 0.95)'); ?>;
+            --theme-shadow: <?php echo e($currentTheme['shadow'] ?? '0 8px 32px rgba(102, 126, 234, 0.3)'); ?>;
         }
         
         body {
@@ -752,7 +752,7 @@
 </head>
 <body>
     <!-- Google Tag Manager (noscript) -->
-    @include('components.tracking-noscript')
+    <?php echo $__env->make('components.tracking-noscript', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     
     <!-- Botão de toggle da sidebar -->
     <button class="sidebar-toggle d-flex d-md-flex" id="sidebarToggle" title="Alternar menu lateral">
@@ -768,13 +768,13 @@
             <nav class="sidebar" id="sidebar">
                 <div class="position-sticky pt-4">
                     <div class="sidebar-header px-3 mb-4">
-                        @php
+                        <?php
                             $sidebarLogoPath = \App\Models\SystemSetting::get('sidebar_logo_path', '/assets/images/logotipo-dark.svg');
-                        @endphp
+                        ?>
                         
                         <!-- Logo - sempre exibir a imagem -->
                         <div class="text-center sidebar-logo-container">
-                            <img src="{{ asset($sidebarLogoPath) }}" 
+                            <img src="<?php echo e(asset($sidebarLogoPath)); ?>" 
                                  alt="Logo" 
                                  class="img-fluid sidebar-custom-logo" 
                                  style="max-height: 50px; max-width: 200px;"
@@ -833,207 +833,198 @@
                             <h6 class="nav-section-title text-white-50 px-2 mb-2">MENU PRINCIPAL</h6>
                             <ul class="nav flex-column">
                                 <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" 
-                                       href="{{ route('dashboard') }}">
+                                    <a class="nav-link <?php echo e(request()->routeIs('dashboard') ? 'active' : ''); ?>" 
+                                       href="<?php echo e(route('dashboard')); ?>">
                                         <i class="fas fa-tachometer-alt me-3"></i>
                                         Dashboard
                                     </a>
                                 </li>
-                                @if(session('admin_tipo') === 'admin')
+                                <?php if((!empty($userMenuPermissions['admin.inscricoes']) && $userMenuPermissions['admin.inscricoes']) || session('admin_tipo') === 'admin'): ?>
                                 <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('admin.analytics.*') ? 'active' : '' }}" 
-                                       href="{{ route('admin.analytics.dashboard') }}">
-                                        <i class="fas fa-chart-line me-3"></i>
-                                        Analytics
-                                    </a>
-                                </li>
-                                @endif
-                                @if((!empty($userMenuPermissions['admin.inscricoes']) && $userMenuPermissions['admin.inscricoes']) || session('admin_tipo') === 'admin')
-                                <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('admin.inscricoes') ? 'active' : '' }}" 
-                                       href="{{ route('admin.inscricoes') }}">
+                                    <a class="nav-link <?php echo e(request()->routeIs('admin.inscricoes') ? 'active' : ''); ?>" 
+                                       href="<?php echo e(route('admin.inscricoes')); ?>">
                                         <i class="fas fa-users me-3"></i>
                                         Inscrições
                                     </a>
                                 </li>
-                                @endif
-                                @if((!empty($userMenuPermissions['admin.matriculas.*']) && $userMenuPermissions['admin.matriculas.*']) || session('admin_tipo') === 'admin')
+                                <?php endif; ?>
+                                <?php if((!empty($userMenuPermissions['admin.matriculas.*']) && $userMenuPermissions['admin.matriculas.*']) || session('admin_tipo') === 'admin'): ?>
                                 <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('admin.matriculas.*') ? 'active' : '' }}"
-                                        href="{{ route('admin.matriculas.index') }}">
+                                    <a class="nav-link <?php echo e(request()->routeIs('admin.matriculas.*') ? 'active' : ''); ?>"
+                                        href="<?php echo e(route('admin.matriculas.index')); ?>">
                                         <i class="fas fa-graduation-cap me-3"></i>
                                         <span>Matrículas</span>
                                     </a>
                                 </li>
-                                @endif
-                                @if((!empty($userMenuPermissions['admin.contracts.*']) && $userMenuPermissions['admin.contracts.*']) || session('admin_tipo') === 'admin')
+                                <?php endif; ?>
+                                <?php if((!empty($userMenuPermissions['admin.contracts.*']) && $userMenuPermissions['admin.contracts.*']) || session('admin_tipo') === 'admin'): ?>
                                 <li class="nav-item dropdown">
-                                    <a class="nav-link dropdown-toggle {{ request()->routeIs('admin.contracts.*') ? 'active' : '' }}" 
+                                    <a class="nav-link dropdown-toggle <?php echo e(request()->routeIs('admin.contracts.*') ? 'active' : ''); ?>" 
                                        href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                         <i class="fas fa-file-contract me-3"></i>
                                         <span>Contratos</span>
                                     </a>
                                     <ul class="dropdown-menu">
                                         <li>
-                                            <a class="dropdown-item {{ request()->routeIs('admin.contracts.index') ? 'active' : '' }}" 
-                                               href="{{ route('admin.contracts.index') }}">
+                                            <a class="dropdown-item <?php echo e(request()->routeIs('admin.contracts.index') ? 'active' : ''); ?>" 
+                                               href="<?php echo e(route('admin.contracts.index')); ?>">
                                                 <i class="fas fa-list me-2"></i>
                                                 Listar Contratos
                                             </a>
                                         </li>
-                                        @if((!empty($userMenuPermissions['admin.contracts.templates.*']) && $userMenuPermissions['admin.contracts.templates.*']) || session('admin_tipo') === 'admin')
+                                        <?php if((!empty($userMenuPermissions['admin.contracts.templates.*']) && $userMenuPermissions['admin.contracts.templates.*']) || session('admin_tipo') === 'admin'): ?>
                                         <li>
-                                            <a class="dropdown-item {{ request()->routeIs('admin.contracts.templates.*') ? 'active' : '' }}" 
-                                               href="{{ route('admin.contracts.templates.index') }}">
+                                            <a class="dropdown-item <?php echo e(request()->routeIs('admin.contracts.templates.*') ? 'active' : ''); ?>" 
+                                               href="<?php echo e(route('admin.contracts.templates.index')); ?>">
                                                 <i class="fas fa-file-alt me-2"></i>
                                                 Templates
                                             </a>
                                         </li>
-                                        @endif
+                                        <?php endif; ?>
                                     </ul>
                                 </li>
-                                @endif
-                                @if((!empty($userMenuPermissions['admin.kanban.*']) && $userMenuPermissions['admin.kanban.*']) || session('admin_tipo') === 'admin')
+                                <?php endif; ?>
+                                <?php if((!empty($userMenuPermissions['admin.kanban.*']) && $userMenuPermissions['admin.kanban.*']) || session('admin_tipo') === 'admin'): ?>
                                 <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('admin.kanban.*') ? 'active' : '' }}" 
-                                       href="{{ route('admin.kanban.index') }}">
+                                    <a class="nav-link <?php echo e(request()->routeIs('admin.kanban.*') ? 'active' : ''); ?>" 
+                                       href="<?php echo e(route('admin.kanban.index')); ?>">
                                         <i class="fas fa-columns me-3"></i>
                                         Kanban
                                     </a>
                                 </li>
-                                @endif
-                                @if((!empty($userMenuPermissions['admin.files.*']) && $userMenuPermissions['admin.files.*']) || session('admin_tipo') === 'admin')
+                                <?php endif; ?>
+                                <?php if((!empty($userMenuPermissions['admin.files.*']) && $userMenuPermissions['admin.files.*']) || session('admin_tipo') === 'admin'): ?>
                                 <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('admin.files.*') ? 'active' : '' }}" 
-                                       href="{{ route('admin.files.index') }}">
+                                    <a class="nav-link <?php echo e(request()->routeIs('admin.files.*') ? 'active' : ''); ?>" 
+                                       href="<?php echo e(route('admin.files.index')); ?>">
                                         <i class="fas fa-cloud me-3"></i>
                                         Arquivos
                                     </a>
                                 </li>
-                                @endif
-                                @if((!empty($userMenuPermissions['dashboard.contacts.*']) && $userMenuPermissions['contacts.*']) || session('admin_tipo') === 'admin')
+                                <?php endif; ?>
+                                <?php if((!empty($userMenuPermissions['dashboard.contacts.*']) && $userMenuPermissions['contacts.*']) || session('admin_tipo') === 'admin'): ?>
                                 <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('contacts.*') ? 'active' : '' }}" 
-                                       href="{{ route('contacts.index') }}">
+                                    <a class="nav-link <?php echo e(request()->routeIs('contacts.*') ? 'active' : ''); ?>" 
+                                       href="<?php echo e(route('contacts.index')); ?>">
                                         <i class="fas fa-address-book me-3"></i>
                                         Contatos
                                     </a>
                                 </li>
-                                @endif
-                                @if((!empty($userMenuPermissions['admin.parceiros.*']) && $userMenuPermissions['admin.parceiros.*']) || session('admin_tipo') === 'admin')
+                                <?php endif; ?>
+                                <?php if((!empty($userMenuPermissions['admin.parceiros.*']) && $userMenuPermissions['admin.parceiros.*']) || session('admin_tipo') === 'admin'): ?>
                                 <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('admin.parceiros.*') ? 'active' : '' }}" 
-                                       href="{{ route('admin.parceiros.index') }}">
+                                    <a class="nav-link <?php echo e(request()->routeIs('admin.parceiros.*') ? 'active' : ''); ?>" 
+                                       href="<?php echo e(route('admin.parceiros.index')); ?>">
                                         <i class="fas fa-handshake me-3"></i>
                                         Parceiros
                                     </a>
                                 </li>
-                                @endif
+                                <?php endif; ?>
                             </ul>
                         </div>
                         
-                        @if(session('admin_tipo') === 'admin' || 
+                        <?php if(session('admin_tipo') === 'admin' || 
                            (!empty($userMenuPermissions['admin.contracts.templates.*']) && $userMenuPermissions['admin.contracts.templates.*']) ||
                            (!empty($userMenuPermissions['admin.email-templates.*']) && $userMenuPermissions['admin.email-templates.*']) ||
-                           (!empty($userMenuPermissions['admin.whatsapp.templates.*']) && $userMenuPermissions['admin.whatsapp.templates.*']))
+                           (!empty($userMenuPermissions['admin.whatsapp.templates.*']) && $userMenuPermissions['admin.whatsapp.templates.*'])): ?>
                             <div class="nav-section mb-3">
                                 <h6 class="nav-section-title text-white-50 px-2 mb-2">TEMPLATES</h6>
                                 <ul class="nav flex-column">
-                                    @if((!empty($userMenuPermissions['admin.contracts.templates.*']) && $userMenuPermissions['admin.contracts.templates.*']) || session('admin_tipo') === 'admin')
+                                    <?php if((!empty($userMenuPermissions['admin.contracts.templates.*']) && $userMenuPermissions['admin.contracts.templates.*']) || session('admin_tipo') === 'admin'): ?>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.contracts.templates.*') ? 'active' : '' }}" 
-                                           href="{{ route('admin.contracts.templates.index') }}">
+                                        <a class="nav-link <?php echo e(request()->routeIs('admin.contracts.templates.*') ? 'active' : ''); ?>" 
+                                           href="<?php echo e(route('admin.contracts.templates.index')); ?>">
                                             <i class="fas fa-file-contract me-3"></i>
                                             Templates de Contratos
                                         </a>
                                     </li>
-                                    @endif
-                                    @if((!empty($userMenuPermissions['admin.email-templates.*']) && $userMenuPermissions['admin.email-templates.*']) || session('admin_tipo') === 'admin')
+                                    <?php endif; ?>
+                                    <?php if((!empty($userMenuPermissions['admin.email-templates.*']) && $userMenuPermissions['admin.email-templates.*']) || session('admin_tipo') === 'admin'): ?>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.email-templates.*') ? 'active' : '' }}" 
-                                           href="{{ route('admin.email-templates.index') }}">
+                                        <a class="nav-link <?php echo e(request()->routeIs('admin.email-templates.*') ? 'active' : ''); ?>" 
+                                           href="<?php echo e(route('admin.email-templates.index')); ?>">
                                             <i class="fas fa-envelope me-3"></i>
                                             Templates de Email
                                         </a>
                                     </li>
-                                    @endif
-                                    @if((!empty($userMenuPermissions['admin.whatsapp.templates.*']) && $userMenuPermissions['admin.whatsapp.templates.*']) || session('admin_tipo') === 'admin')
+                                    <?php endif; ?>
+                                    <?php if((!empty($userMenuPermissions['admin.whatsapp.templates.*']) && $userMenuPermissions['admin.whatsapp.templates.*']) || session('admin_tipo') === 'admin'): ?>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.whatsapp.templates.*') ? 'active' : '' }}" 
-                                           href="{{ route('admin.whatsapp.templates.index') }}">
+                                        <a class="nav-link <?php echo e(request()->routeIs('admin.whatsapp.templates.*') ? 'active' : ''); ?>" 
+                                           href="<?php echo e(route('admin.whatsapp.templates.index')); ?>">
                                             <i class="fas fa-comment-dots me-3"></i>
                                             Templates WhatsApp
                                         </a>
                                     </li>
-                                    @endif
+                                    <?php endif; ?>
                                 </ul>
                             </div>
-                        @endif
+                        <?php endif; ?>
                         
-                        @if(session('admin_tipo') === 'admin' || 
+                        <?php if(session('admin_tipo') === 'admin' || 
                            (!empty($userMenuPermissions['admin.monitoramento']) && $userMenuPermissions['admin.monitoramento']) || 
                            (!empty($userMenuPermissions['admin.usuarios.*']) && $userMenuPermissions['admin.usuarios.*']) || 
                            (!empty($userMenuPermissions['admin.settings.*']) && $userMenuPermissions['admin.settings.*']) || 
                            (!empty($userMenuPermissions['admin.whatsapp.*']) && $userMenuPermissions['admin.whatsapp.*']) ||
-                           (!empty($userMenuPermissions['admin.permissions.*']) && $userMenuPermissions['admin.permissions.*']))
+                           (!empty($userMenuPermissions['admin.permissions.*']) && $userMenuPermissions['admin.permissions.*'])): ?>
                             <div class="nav-section mb-3">
                                 <h6 class="nav-section-title text-white-50 px-2 mb-2">ADMINISTRAÇÃO</h6>
                                 <ul class="nav flex-column">
-                                    @if((!empty($userMenuPermissions['admin.monitoramento']) && $userMenuPermissions['admin.monitoramento']) || session('admin_tipo') === 'admin')
+                                    <?php if((!empty($userMenuPermissions['admin.monitoramento']) && $userMenuPermissions['admin.monitoramento']) || session('admin_tipo') === 'admin'): ?>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.monitoramento') ? 'active' : '' }}" 
-                                           href="{{ route('admin.monitoramento') }}">
+                                        <a class="nav-link <?php echo e(request()->routeIs('admin.monitoramento') ? 'active' : ''); ?>" 
+                                           href="<?php echo e(route('admin.monitoramento')); ?>">
                                             <i class="fas fa-chart-line me-3"></i>
                                             Monitoramento
                                         </a>
                                     </li>
-                                    @endif
-                                    @if((!empty($userMenuPermissions['admin.usuarios.*']) && $userMenuPermissions['admin.usuarios.*']) || session('admin_tipo') === 'admin')
+                                    <?php endif; ?>
+                                    <?php if((!empty($userMenuPermissions['admin.usuarios.*']) && $userMenuPermissions['admin.usuarios.*']) || session('admin_tipo') === 'admin'): ?>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.usuarios.*') ? 'active' : '' }}" 
-                                           href="{{ route('admin.usuarios.index') }}">
+                                        <a class="nav-link <?php echo e(request()->routeIs('admin.usuarios.*') ? 'active' : ''); ?>" 
+                                           href="<?php echo e(route('admin.usuarios.index')); ?>">
                                             <i class="fas fa-user-cog me-3"></i>
                                             Usuários
                                         </a>
                                     </li>
-                                    @endif
-                                    @if((!empty($userMenuPermissions['admin.whatsapp.*']) && $userMenuPermissions['admin.whatsapp.*']) || session('admin_tipo') === 'admin')
+                                    <?php endif; ?>
+                                    <?php if((!empty($userMenuPermissions['admin.whatsapp.*']) && $userMenuPermissions['admin.whatsapp.*']) || session('admin_tipo') === 'admin'): ?>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.settings.whatsapp') ? 'active' : '' }}" 
-                                           href="{{ route('admin.settings.whatsapp') }}">
+                                        <a class="nav-link <?php echo e(request()->routeIs('admin.settings.whatsapp') ? 'active' : ''); ?>" 
+                                           href="<?php echo e(route('admin.settings.whatsapp')); ?>">
                                             <i class="fab fa-whatsapp me-3"></i>
                                             WhatsApp
                                         </a>
                                     </li>
-                                    @endif
-                                    @if((!empty($userMenuPermissions['admin.settings.*']) && $userMenuPermissions['admin.settings.*']) || session('admin_tipo') === 'admin')
+                                    <?php endif; ?>
+                                    <?php if((!empty($userMenuPermissions['admin.settings.*']) && $userMenuPermissions['admin.settings.*']) || session('admin_tipo') === 'admin'): ?>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.settings.index') ? 'active' : '' }}" 
-                                           href="{{ route('admin.settings.index') }}">
+                                        <a class="nav-link <?php echo e(request()->routeIs('admin.settings.index') ? 'active' : ''); ?>" 
+                                           href="<?php echo e(route('admin.settings.index')); ?>">
                                             <i class="fas fa-cogs me-3"></i>
                                             Configurações
                                         </a>
                                     </li>
-                                    @endif
-                                    @if(session('admin_tipo') === 'admin' || (!empty($userMenuPermissions['admin.permissions.*']) && $userMenuPermissions['admin.permissions.*']))
+                                    <?php endif; ?>
+                                    <?php if(session('admin_tipo') === 'admin' || (!empty($userMenuPermissions['admin.permissions.*']) && $userMenuPermissions['admin.permissions.*'])): ?>
                                     <li class="nav-item">
-                                        <a class="nav-link {{ request()->routeIs('admin.permissions.*') ? 'active' : '' }}" 
-                                           href="{{ route('admin.permissions.index') }}">
+                                        <a class="nav-link <?php echo e(request()->routeIs('admin.permissions.*') ? 'active' : ''); ?>" 
+                                           href="<?php echo e(route('admin.permissions.index')); ?>">
                                             <i class="fas fa-user-shield me-3"></i>
                                             Permissões
                                         </a>
                                     </li>
-                                    @endif
+                                    <?php endif; ?>
                                 </ul>
                             </div>
-                        @endif
+                        <?php endif; ?>
                         
                         <div class="nav-section mb-3">
                             <h6 class="nav-section-title text-white-50 px-2 mb-2">AJUDA</h6>
                             <ul class="nav flex-column">
                                 <li class="nav-item">
-                                    <a class="nav-link {{ request()->routeIs('admin.help.*') ? 'active' : '' }}" 
-                                       href="{{ route('admin.help.index') }}">
+                                    <a class="nav-link <?php echo e(request()->routeIs('admin.help.*') ? 'active' : ''); ?>" 
+                                       href="<?php echo e(route('admin.help.index')); ?>">
                                         <i class="fas fa-question-circle me-3"></i>
                                         Central de Ajuda
                                     </a>
@@ -1044,8 +1035,8 @@
                         <div class="nav-section mt-auto">
                             <ul class="nav flex-column">
                                 <li class="nav-item">
-                                    <form method="POST" action="{{ route('logout') }}">
-                                        @csrf
+                                    <form method="POST" action="<?php echo e(route('logout')); ?>">
+                                        <?php echo csrf_field(); ?>
                                         <button type="submit" class="nav-link btn btn-link text-start w-100 logout-btn">
                                             <i class="fas fa-sign-out-alt me-3"></i>
                                             Sair
@@ -1059,7 +1050,7 @@
                                     <i class="fas fa-code-branch me-1"></i> v1.0.4
                                 </div>
                                 <div class="copyright small text-white-50">
-                                    &copy; {{ date('Y') }} Ensino Certo
+                                    &copy; <?php echo e(date('Y')); ?> Ensino Certo
                                 </div>
                             </div>
                             
@@ -1072,10 +1063,10 @@
             <!-- Main content -->
             <main class="main-content" id="mainContent">
                 <!-- Topbar com saudação e tema dinâmico -->
-                @if(session('admin_email'))
+                <?php if(session('admin_email')): ?>
                     <div class="topbar-greeting p-3 mb-4 shadow-sm" style="background: var(--theme-card-bg); backdrop-filter: blur(10px); border-radius: 12px;">
                         <div class="row align-items-center">
-                            @php
+                            <?php
                                 $name = session('admin_name');
                                 if ($name) {
                                     // Pegar apenas o primeiro nome
@@ -1083,47 +1074,48 @@
                                 } else {
                                     $firstName = 'Usuário';
                                 }
-                            @endphp
+                            ?>
                             
                             <div class="col-md-6">
                                 <div class="d-flex align-items-center">
                                     <div class="greeting-icon-container me-3">
-                                        <i class="greeting-icon {{ $currentTheme['icon'] ?? 'fas fa-sun' }}" style="font-size: 2rem; color: {{ $currentTheme['primary_color'] ?? '#667eea' }};"></i>
+                                        <i class="greeting-icon <?php echo e($currentTheme['icon'] ?? 'fas fa-sun'); ?>" style="font-size: 2rem; color: <?php echo e($currentTheme['primary_color'] ?? '#667eea'); ?>;"></i>
                                     </div>
                                     <div>
-                                        <h4 class="m-0">{{ $currentTheme['greeting'] ?? 'Olá' }}, {{ $firstName }}!</h4>
-                                        @if(session('admin_tipo'))
+                                        <h4 class="m-0"><?php echo e($currentTheme['greeting'] ?? 'Olá'); ?>, <?php echo e($firstName); ?>!</h4>
+                                        <?php if(session('admin_tipo')): ?>
                                             <div class="user-role mt-1">
-                                                @switch(session('admin_tipo'))
-                                                    @case('admin')
+                                                <?php switch(session('admin_tipo')):
+                                                    case ('admin'): ?>
                                                         <span class="badge bg-warning text-dark">👑 Administrador</span>
-                                                        @break
-                                                    @case('vendedor')
+                                                        <?php break; ?>
+                                                    <?php case ('vendedor'): ?>
                                                         <span class="badge bg-success">💼 Vendedor</span>
-                                                        @break
-                                                    @case('colaborador')
+                                                        <?php break; ?>
+                                                    <?php case ('colaborador'): ?>
                                                         <span class="badge bg-info">👤 Colaborador</span>
-                                                        @break
-                                                    @case('midia')
+                                                        <?php break; ?>
+                                                    <?php case ('midia'): ?>
                                                         <span class="badge bg-primary">📱 Mídia</span>
-                                                        @break
-                                                @endswitch
+                                                        <?php break; ?>
+                                                <?php endswitch; ?>
                                                 
                                                 <!-- Notificação de Impersonation -->
-                                                @if(session('is_impersonating'))
+                                                <?php if(session('is_impersonating')): ?>
                                                     <div class="mt-2">
                                                         <div class="alert alert-warning alert-dismissible fade show py-2 px-3 mb-0" role="alert">
                                                             <div class="d-flex align-items-center">
                                                                 <i class="fas fa-user-secret me-2"></i>
                                                                 <div class="flex-grow-1">
                                                                     <strong>Modo Impersonation:</strong> 
-                                                                    Logado como <strong>{{ session('impersonated_user_name') }}</strong>
+                                                                    Logado como <strong><?php echo e(session('impersonated_user_name')); ?></strong>
                                                                     <small class="d-block text-muted">
-                                                                        Usuário original: {{ session('impersonating_user_name') }}
+                                                                        Usuário original: <?php echo e(session('impersonating_user_name')); ?>
+
                                                                     </small>
                                                                 </div>
-                                                                <form method="POST" action="{{ route('admin.usuarios.stop-impersonation') }}" class="d-inline">
-                                                                    @csrf
+                                                                <form method="POST" action="<?php echo e(route('admin.usuarios.stop-impersonation')); ?>" class="d-inline">
+                                                                    <?php echo csrf_field(); ?>
                                                                     <button type="submit" class="btn btn-sm btn-outline-danger ms-2">
                                                                         <i class="fas fa-sign-out-alt me-1"></i>
                                                                         Sair da Impersonation
@@ -1132,9 +1124,9 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                @endif
+                                                <?php endif; ?>
                                             </div>
-                                        @endif
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
@@ -1142,11 +1134,11 @@
                                 <div class="d-flex justify-content-md-end align-items-center mt-3 mt-md-0">
                                     <div class="current-time text-muted me-3">
                                         <div class="d-flex flex-column text-end">
-                                            <div class="fw-bold">{{ $currentTime['time'] ?? date('H:i') }}</div>
-                                            <small>{{ $currentTime['date'] ?? date('d/m/Y') }}</small>
+                                            <div class="fw-bold"><?php echo e($currentTime['time'] ?? date('H:i')); ?></div>
+                                            <small><?php echo e($currentTime['date'] ?? date('d/m/Y')); ?></small>
                                         </div>
                                     </div>
-                                    @if(session('admin_id'))
+                                    <?php if(session('admin_id')): ?>
                                         <div class="profile-dropdown dropdown">
                                             <button class="btn btn-light dropdown-toggle d-flex align-items-center" type="button" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                                 <div class="avatar-circle me-2">
@@ -1155,16 +1147,16 @@
                                                 <span class="d-none d-md-inline">Perfil</span>
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
-                                                <li><a class="dropdown-item" href="{{ route('dashboard') }}">
+                                                <li><a class="dropdown-item" href="<?php echo e(route('dashboard')); ?>">
                                                     <i class="fas fa-tachometer-alt me-2"></i> Dashboard
                                                 </a></li>
-                                                <li><a class="dropdown-item" href="{{ route('profile.edit') }}">
+                                                <li><a class="dropdown-item" href="<?php echo e(route('profile.edit')); ?>">
                                                     <i class="fas fa-user me-2"></i> Meu Perfil
                                                 </a></li>
                                                 <li><hr class="dropdown-divider"></li>
                                                 <li>
-                                                    <form method="POST" action="{{ route('logout') }}">
-                                                        @csrf
+                                                    <form method="POST" action="<?php echo e(route('logout')); ?>">
+                                                        <?php echo csrf_field(); ?>
                                                         <button type="submit" class="dropdown-item text-danger">
                                                             <i class="fas fa-sign-out-alt me-2"></i> Sair
                                                         </button>
@@ -1172,62 +1164,64 @@
                                                 </li>
                                             </ul>
                                         </div>
-                                    @else
-                                        <form method="POST" action="{{ route('logout') }}" class="d-inline">
-                                            @csrf
+                                    <?php else: ?>
+                                        <form method="POST" action="<?php echo e(route('logout')); ?>" class="d-inline">
+                                            <?php echo csrf_field(); ?>
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Sair">
                                                 <i class="fas fa-sign-out-alt"></i> Sair
                                             </button>
                                         </form>
-                                    @endif
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
                     </div>
-                @endif
+                <?php endif; ?>
                 
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">@yield('page-title', 'Dashboard')</h1>
+                    <h1 class="h2"><?php echo $__env->yieldContent('page-title', 'Dashboard'); ?></h1>
                     <div class="btn-toolbar mb-2 mb-md-0">
-                        @yield('page-actions')
+                        <?php echo $__env->yieldContent('page-actions'); ?>
                     </div>
                 </div>
 
                 <!-- Alertas -->
-                @if(session('success'))
+                <?php if(session('success')): ?>
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="fas fa-check-circle me-2"></i>
-                        {{ session('success') }}
+                        <?php echo e(session('success')); ?>
+
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
-                @endif
+                <?php endif; ?>
 
-                @if(session('error'))
+                <?php if(session('error')): ?>
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
                         <i class="fas fa-exclamation-circle me-2"></i>
-                        {{ session('error') }}
+                        <?php echo e(session('error')); ?>
+
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
-                @endif
+                <?php endif; ?>
 
-                @if($errors->any())
+                <?php if($errors->any()): ?>
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
                         <i class="fas fa-exclamation-triangle me-2"></i>
                         <ul class="mb-0">
-                            @foreach($errors->all() as $error)
-                                <li>{{ $error }}</li>
-                            @endforeach
+                            <?php $__currentLoopData = $errors->all(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $error): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <li><?php echo e($error); ?></li>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </ul>
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
-                @endif
+                <?php endif; ?>
 
                 <!-- Conteúdo da página -->
-                @yield('content')
+                <?php echo $__env->yieldContent('content'); ?>
                 
                 <!-- Footer -->
                 <footer class="pb-2 text-center text-muted border-top pt-3 mt-5">
-                    <small>&copy; {{ date('Y') }} Ensino Certo. Todos os direitos reservados.</small>
+                    <small>&copy; <?php echo e(date('Y')); ?> Ensino Certo. Todos os direitos reservados.</small>
                 </footer>
             </main>
         </div>
@@ -1254,10 +1248,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     
     <!-- CSRF Helper Fixado -->
-    <script src="{{ asset('js/csrf-helper-fixed.js') }}"></script>
+    <script src="<?php echo e(asset('js/csrf-helper-fixed.js')); ?>"></script>
     
     <!-- Scripts adicionais -->
-    @stack('scripts')
+    <?php echo $__env->yieldPushContent('scripts'); ?>
     
     <script>
         // Script para controlar a visibilidade da sidebar
@@ -1567,4 +1561,4 @@
         });
     </script>
 </body>
-</html> 
+</html> <?php /**PATH /home/u760830176/domains/ensinocerto.com.br/public_html/resources/views/layouts/admin.blade.php ENDPATH**/ ?>

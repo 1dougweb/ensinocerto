@@ -86,6 +86,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 2. Clique com botão direito → "Ver código fonte"
 3. Procure por `GTM-NPXJKW38`
 4. Verifique se as tags estão presentes
+5. **IMPORTANTE**: Confirme que há apenas UMA tag GTM (não duplicada)
+
+### ⚠️ **Verificação de Conflitos**
+- **✅ Correto**: Apenas uma tag GTM na página
+- **❌ Incorreto**: Múltiplas tags GTM ou tags duplicadas
+- **🔍 Buscar por**: `GTM-NPXJKW38` deve aparecer apenas UMA vez
 
 ### 2. Console do Navegador
 1. Abra as Ferramentas do Desenvolvedor (F12)

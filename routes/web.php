@@ -267,6 +267,14 @@ Route::middleware(['auth', 'theme', \App\Http\Middleware\CheckMenuPermission::cl
 
             // Parceiros (admin)
             Route::get('/parceiros', [ParceiroAdminController::class, 'index'])->name('admin.parceiros.index');
+
+            // Google Analytics
+            Route::prefix('analytics')->group(function () {
+                Route::get('/', [\App\Http\Controllers\GoogleAnalyticsController::class, 'dashboard'])->name('admin.analytics.dashboard');
+                Route::get('/data', [\App\Http\Controllers\GoogleAnalyticsController::class, 'getAnalyticsData'])->name('admin.analytics.data');
+                Route::get('/ads-data', [\App\Http\Controllers\GoogleAnalyticsController::class, 'getGoogleAdsData'])->name('admin.analytics.ads-data');
+                Route::get('/traffic-sources', [\App\Http\Controllers\GoogleAnalyticsController::class, 'getTrafficSources'])->name('admin.analytics.traffic-sources');
+            });
             Route::get('/parceiros/exportar', [ParceiroAdminController::class, 'exportar'])->name('admin.parceiros.exportar');
             Route::get('/parceiros/create', [ParceiroAdminController::class, 'create'])->name('admin.parceiros.create');
             Route::post('/parceiros', [ParceiroAdminController::class, 'store'])->name('admin.parceiros.store');

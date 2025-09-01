@@ -67,6 +67,21 @@ As tags do GTM só são exibidas quando:
 2. `landing_gtm_id` não está vazio
 3. O usuário está na landing page (`welcome.blade.php`)
 
+### ⚠️ **Lógica de Prioridade**
+
+Para evitar conflitos, o sistema implementa uma **lógica de prioridade**:
+
+- **Se GTM da Landing Page estiver ativo**: 
+  - ✅ Carrega APENAS o GTM específico da landing page
+  - ❌ **NÃO** carrega o GTM geral do sistema
+  - 🔧 Cria um `dataLayer` simulado para compatibilidade
+
+- **Se GTM da Landing Page estiver inativo**:
+  - ✅ Carrega o GTM geral do sistema (via `tracking-scripts`)
+  - ❌ **NÃO** carrega o GTM específico da landing page
+
+**Resultado**: Nunca há duplicação de GTM na página!
+
 ## Arquivos Modificados
 
 ### Backend
@@ -134,6 +149,15 @@ if ($landingSettings['gtm_enabled'] && !empty($landingSettings['gtm_id'])) {
 2. Confirme se `landing_gtm_id` está preenchido
 3. Limpe o cache do navegador
 4. Verifique os logs do Laravel
+
+### ⚠️ **Conflitos de GTM Duplicado**
+**Sintoma**: Múltiplas tags GTM na página ou erros de JavaScript
+**Solução**: 
+1. Verificar se o GTM da landing page está ativo
+2. Confirmar que apenas UM GTM está sendo carregado
+3. Usar a lógica de prioridade implementada
+
+**Prevenção**: O sistema automaticamente evita duplicação usando a lógica de prioridade
 
 ### Erro de JavaScript
 1. Valide o formato do ID do GTM
