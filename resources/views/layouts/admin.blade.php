@@ -839,6 +839,15 @@
                                         Dashboard
                                     </a>
                                 </li>
+                                @if(session('admin_tipo') === 'admin')
+                                <li class="nav-item">
+                                    <a class="nav-link {{ request()->routeIs('admin.analytics.*') ? 'active' : '' }}" 
+                                       href="{{ route('admin.analytics.dashboard') }}">
+                                        <i class="fas fa-chart-line me-3"></i>
+                                        Analytics
+                                    </a>
+                                </li>
+                                @endif
                                 @if((!empty($userMenuPermissions['admin.inscricoes']) && $userMenuPermissions['admin.inscricoes']) || session('admin_tipo') === 'admin')
                                 <li class="nav-item">
                                     <a class="nav-link {{ request()->routeIs('admin.inscricoes') ? 'active' : '' }}" 

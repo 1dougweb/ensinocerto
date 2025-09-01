@@ -45,4 +45,18 @@ return [
         'redirect_uri' => env('GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8000/auth/google/callback'),
     ],
 
+    'google_analytics' => [
+        'view_id' => env('GOOGLE_ANALYTICS_VIEW_ID'),
+        'service_account_key_file' => env('GOOGLE_ANALYTICS_SERVICE_ACCOUNT_KEY_FILE'),
+        'property_id' => env('GOOGLE_ANALYTICS_PROPERTY_ID'),
+        'measurement_id' => env('GOOGLE_ANALYTICS_MEASUREMENT_ID'),
+        'gtm_id' => env('GOOGLE_TAG_MANAGER_ID'),
+        'access_token' => env('GOOGLE_ANALYTICS_ACCESS_TOKEN'),
+        'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN'),
+        'client_id' => env('GOOGLE_ANALYTICS_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_ANALYTICS_CLIENT_SECRET'),
+        'refresh_token' => env('GOOGLE_ANALYTICS_REFRESH_TOKEN'),
+        'customer_id' => env('GOOGLE_ADS_CUSTOMER_ID'),
+    ],
+
 ];

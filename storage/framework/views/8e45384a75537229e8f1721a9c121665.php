@@ -839,6 +839,15 @@
                                         Dashboard
                                     </a>
                                 </li>
+                                <?php if(session('admin_tipo') === 'admin'): ?>
+                                <li class="nav-item">
+                                    <a class="nav-link <?php echo e(request()->routeIs('admin.analytics.*') ? 'active' : ''); ?>" 
+                                       href="<?php echo e(route('admin.analytics.dashboard')); ?>">
+                                        <i class="fas fa-chart-line me-3"></i>
+                                        Analytics
+                                    </a>
+                                </li>
+                                <?php endif; ?>
                                 <?php if((!empty($userMenuPermissions['admin.inscricoes']) && $userMenuPermissions['admin.inscricoes']) || session('admin_tipo') === 'admin'): ?>
                                 <li class="nav-item">
                                     <a class="nav-link <?php echo e(request()->routeIs('admin.inscricoes') ? 'active' : ''); ?>" 

@@ -44,8 +44,19 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Tracking Scripts -->
-    <?php echo $__env->make('components.tracking-scripts', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+    <!-- Tracking Scripts (GTM Geral) -->
+    <?php if(!($landingSettings['gtm_enabled'] ?? false) || empty($landingSettings['gtm_id'])): ?>
+        <?php echo $__env->make('components.tracking-scripts', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+    <?php else: ?>
+        <!-- GTM Geral desabilitado - usando GTM específico da landing page -->
+        <script>
+            // Criar um dataLayer simulado para compatibilidade
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push = function(obj) {
+                Array.prototype.push.call(this, obj);
+            };
+        </script>
+    <?php endif; ?>
     
     <!-- Google Tag Manager para Landing Page -->
     <?php if($landingSettings['gtm_enabled'] ?? false): ?>
@@ -365,8 +376,19 @@
     }
     </script>
     
-    </head>
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-NPXJKW38');</script>
+    <!-- End Google Tag Manager -->
+</head>
 <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NPXJKW38"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
     <!-- Banner de Consentimento de Cookies LGPD -->
     <div id="cookie-consent">
         <div class="cookie-content">

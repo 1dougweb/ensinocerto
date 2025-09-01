@@ -10,6 +10,10 @@
         </a>
         <a href="<?php echo e(route('admin.inscricoes.exportar')); ?>" class="btn btn-success">
         <i class="fas fa-download me-2"></i>Exportar CSV</a>
+        <a href="<?php echo e(route('admin.analytics.dashboard')); ?>" class="btn btn-info">
+            <i class="fas fa-chart-line me-2"></i>
+            Analytics
+        </a>
     </div>
 <?php $__env->stopSection(); ?>
 
