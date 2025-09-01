@@ -63,10 +63,10 @@ class SyncGoogleDrive extends Command
                 $dbFile = GoogleDriveFile::where('file_id', $driveFile->file_id)->first();
                 
                 if (!$dbFile) {
-                    // Criar novo arquivo no banco
-                    GoogleDriveFile::create([
-                        'name' => $driveFile->name,
+                    // Criar novo arquivo no banco (evitando duplicatas)
+                    GoogleDriveFile::createOrUpdateFromGoogleDrive([
                         'file_id' => $driveFile->file_id,
+                        'name' => $driveFile->name,
                         'mime_type' => $driveFile->mime_type ?? 'application/octet-stream',
                         'web_view_link' => $driveFile->web_view_link,
                         'web_content_link' => $driveFile->web_content_link,

@@ -134,4 +134,102 @@ class GoogleDriveFile extends Model
 
         return 'fas fa-file';
     }
+
+    /**
+     * Método helper para criar ou atualizar arquivos do Google Drive de forma segura
+     * Evita duplicatas verificando se o file_id já existe (incluindo soft deleted)
+     */
+    public static function createOrUpdateFromGoogleDrive(array $attributes): self
+    {
+        // Verificar se file_id foi fornecido
+        if (!isset($attributes['file_id'])) {
+            throw new \InvalidArgumentException('file_id é obrigatório para criar arquivo do Google Drive');
+        }
+
+        // Primeiro, verificar se já existe (incluindo soft deleted)
+        try {
+            $existingFile = self::withTrashed()->where('file_id', $attributes['file_id'])->first();
+        } catch (\Exception $e) {
+            \Log::warning('GoogleDriveFile::createOrUpdateFromGoogleDrive - Método withTrashed não disponível, verificando apenas registros ativos', [
+                'file_id' => $attributes['file_id'],
+                'error' => $e->getMessage()
+            ]);
+            $existingFile = self::where('file_id', $attributes['file_id'])->first();
+        }
+
+        if ($existingFile) {
+            // Se está soft deleted, restaurar
+            if ($existingFile->trashed()) {
+                try {
+                    $existingFile->restore();
+                    \Log::info('GoogleDriveFile::createOrUpdateFromGoogleDrive - Restaurado registro soft deleted', [
+                        'file_id' => $attributes['file_id'],
+                        'name' => $attributes['name'] ?? 'N/A'
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('GoogleDriveFile::createOrUpdateFromGoogleDrive - Erro ao restaurar registro soft deleted', [
+                        'file_id' => $attributes['file_id'],
+                        'error' => $e->getMessage()
+                    ]);
+                    throw $e;
+                }
+            }
+
+            // Atualizar os dados
+            try {
+                $updateData = array_merge($attributes, [
+                    'is_trashed' => $attributes['is_trashed'] ?? false,
+                    'is_folder' => $attributes['is_folder'] ?? false,
+                    'is_starred' => $attributes['is_starred'] ?? false,
+                    'is_local' => $attributes['is_local'] ?? false,
+                ]);
+
+                $existingFile->update($updateData);
+            } catch (\Exception $e) {
+                \Log::error('GoogleDriveFile::createOrUpdateFromGoogleDrive - Erro ao atualizar registro', [
+                    'file_id' => $attributes['file_id'],
+                    'error' => $e->getMessage(),
+                    'attributes' => $attributes
+                ]);
+                throw $e;
+            }
+
+            \Log::info('GoogleDriveFile::createOrUpdateFromGoogleDrive - Atualizado registro existente', [
+                'file_id' => $attributes['file_id'],
+                'name' => $attributes['name'] ?? 'N/A'
+            ]);
+
+            return $existingFile;
+        }
+
+        // Se não existe, criar novo
+        try {
+            $createData = array_merge($attributes, [
+                'is_trashed' => $attributes['is_trashed'] ?? false,
+                'is_folder' => $attributes['is_folder'] ?? false,
+                'is_starred' => $attributes['is_starred'] ?? false,
+                'is_local' => $attributes['is_local'] ?? false,
+                'created_by' => $attributes['created_by'] ?? 1,
+                'name' => $attributes['name'] ?? 'Arquivo sem nome',
+                'mime_type' => $attributes['mime_type'] ?? 'application/octet-stream',
+            ]);
+
+            $file = self::create($createData);
+
+            \Log::info('GoogleDriveFile::createOrUpdateFromGoogleDrive - Criado novo registro', [
+                'file_id' => $attributes['file_id'],
+                'name' => $attributes['name'] ?? 'N/A',
+                'id' => $file->id
+            ]);
+
+            return $file;
+        } catch (\Exception $e) {
+            \Log::error('GoogleDriveFile::createOrUpdateFromGoogleDrive - Erro ao criar registro', [
+                'file_id' => $attributes['file_id'],
+                'error' => $e->getMessage(),
+                'attributes' => $attributes
+            ]);
+            throw $e;
+        }
+    }
 }

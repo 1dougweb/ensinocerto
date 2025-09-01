@@ -26,6 +26,12 @@ class GoogleDriveService
             
             $this->client = new Client();
             
+            // Configurar timeout para melhorar performance
+            $this->client->setHttpClient(new \GuzzleHttp\Client([
+                'timeout' => 120, // 2 minutos para uploads (reduzido de 5 para melhor performance)
+                'connect_timeout' => 15, // 15 segundos para conexão (reduzido de 30)
+            ]));
+            
             // Usar conta de serviço
             $credentialsPath = storage_path('app/google-credentials.json');
             
@@ -102,6 +108,159 @@ class GoogleDriveService
     private function isTestMode()
     {
         return config('app.env') === 'testing' || config('services.google.test_mode', false);
+    }
+
+    /**
+     * Verifica e cria a pasta raiz se necessário
+     */
+    public function ensureRootFolder()
+    {
+        try {
+            if ($this->isTestMode()) {
+                return ['status' => 'test_mode', 'message' => 'Modo de teste - pasta raiz não verificada'];
+            }
+
+            if (!$this->service) {
+                throw new \Exception('Serviço Google Drive não inicializado');
+            }
+
+            // Verificar se a pasta raiz existe
+            try {
+                $folder = $this->service->files->get($this->rootFolderId, [
+                    'fields' => 'id, name, mimeType, trashed'
+                ]);
+
+                if ($folder->getTrashed()) {
+                    \Log::warning('GoogleDriveService::ensureRootFolder - Pasta raiz está na lixeira, tentando restaurar ou criar nova');
+
+                    // Tentar criar uma nova pasta raiz
+                    $newFolder = $this->createFolder('Documentos Sistema', null, 'root');
+                    $this->rootFolderId = $newFolder->file_id;
+
+                    \Log::info('GoogleDriveService::ensureRootFolder - Nova pasta raiz criada', [
+                        'old_folder_id' => $this->rootFolderId,
+                        'new_folder_id' => $newFolder->file_id,
+                        'new_folder_name' => $newFolder->name
+                    ]);
+
+                    return [
+                        'status' => 'created',
+                        'message' => 'Nova pasta raiz criada pois a anterior estava na lixeira',
+                        'folder_id' => $newFolder->file_id
+                    ];
+                }
+
+                return [
+                    'status' => 'exists',
+                    'message' => 'Pasta raiz existe e está acessível',
+                    'folder_id' => $this->rootFolderId,
+                    'folder_name' => $folder->getName()
+                ];
+
+            } catch (\Google\Service\Exception $e) {
+                if ($e->getCode() === 404) {
+                    \Log::warning('GoogleDriveService::ensureRootFolder - Pasta raiz não encontrada, criando nova');
+
+                    // Criar nova pasta raiz
+                    $newFolder = $this->createFolder('Documentos Sistema', null, 'root');
+                    $this->rootFolderId = $newFolder->file_id;
+
+                    return [
+                        'status' => 'created',
+                        'message' => 'Pasta raiz não encontrada, nova pasta criada',
+                        'folder_id' => $newFolder->file_id
+                    ];
+                }
+                throw $e;
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('GoogleDriveService::ensureRootFolder - Erro ao verificar pasta raiz', [
+                'error' => $e->getMessage(),
+                'root_folder_id' => $this->rootFolderId
+            ]);
+
+            return [
+                'status' => 'error',
+                'message' => 'Erro ao verificar pasta raiz: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Testa a conexão com o Google Drive
+     */
+    public function testConnection()
+    {
+        try {
+            if ($this->isTestMode()) {
+                return ['status' => 'test_mode', 'message' => 'Serviço em modo de teste'];
+            }
+
+            if (!$this->service) {
+                return ['status' => 'error', 'message' => 'Serviço não inicializado'];
+            }
+
+            // Primeiro, verificar se a pasta raiz existe
+            try {
+                $folder = $this->service->files->get($this->rootFolderId, [
+                    'fields' => 'id, name, mimeType, trashed'
+                ]);
+
+                if ($folder->getTrashed()) {
+                    return [
+                        'status' => 'error',
+                        'message' => 'A pasta raiz foi movida para a lixeira',
+                        'folder_id' => $this->rootFolderId
+                    ];
+                }
+
+                \Log::info('GoogleDriveService::testConnection - Pasta raiz verificada', [
+                    'folder_id' => $this->rootFolderId,
+                    'folder_name' => $folder->getName(),
+                    'mime_type' => $folder->getMimeType()
+                ]);
+
+            } catch (\Google\Service\Exception $e) {
+                if ($e->getCode() === 404) {
+                    return [
+                        'status' => 'error',
+                        'message' => 'Pasta raiz não encontrada. Verifique se o ID da pasta está correto.',
+                        'folder_id' => $this->rootFolderId,
+                        'error_code' => 404
+                    ];
+                }
+                throw $e;
+            }
+
+            // Tentar listar arquivos da pasta raiz para testar conexão
+            $response = $this->service->files->listFiles([
+                'q' => "'{$this->rootFolderId}' in parents and trashed = false",
+                'pageSize' => 1,
+                'fields' => 'files(id, name)'
+            ]);
+
+            return [
+                'status' => 'success',
+                'message' => 'Conexão com Google Drive estabelecida com sucesso',
+                'files_count' => count($response->getFiles()),
+                'root_folder_id' => $this->rootFolderId
+            ];
+
+        } catch (\Google\Service\Exception $e) {
+            return [
+                'status' => 'error',
+                'message' => 'Erro específico do Google Drive: ' . $e->getMessage(),
+                'code' => $e->getCode(),
+                'folder_id' => $this->rootFolderId
+            ];
+        } catch (\Exception $e) {
+            return [
+                'status' => 'error',
+                'message' => 'Erro na conexão: ' . $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ];
+        }
     }
 
     /**
@@ -326,6 +485,46 @@ class GoogleDriveService
     }
 
     /**
+     * Upload ultra-rápido para arquivos pequenos (< 5MB)
+     */
+    public function uploadSmallFile(UploadedFile $file, $userId, $parentId = null)
+    {
+        try {
+            // Upload direto sem verificações
+            $fileMetadata = new DriveFile([
+                'name' => $file->getClientOriginalName(),
+                'parents' => [$this->rootFolderId]
+            ]);
+
+            $uploadOptions = [
+                'data' => file_get_contents($file->getRealPath()),
+                'mimeType' => $file->getMimeType(),
+                'uploadType' => 'multipart',
+                'fields' => 'id, name, mimeType, size'
+            ];
+
+            $uploadedFile = $this->service->files->create($fileMetadata, $uploadOptions);
+
+            // Salvar no banco
+            $dbFile = GoogleDriveFile::createOrUpdateFromGoogleDrive([
+                'file_id' => $uploadedFile->getId(),
+                'name' => $uploadedFile->getName(),
+                'mime_type' => $uploadedFile->getMimeType(),
+                'size' => $uploadedFile->getSize(),
+                'parent_id' => $parentId,
+                'created_by' => $userId,
+                'is_folder' => false,
+                'is_trashed' => false
+            ]);
+
+            return $dbFile;
+
+        } catch (\Exception $e) {
+            throw new \Exception('Erro no upload: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Upload de arquivo
      */
     public function uploadFile(UploadedFile $file, $userId, $parentId = null)
@@ -335,8 +534,6 @@ class GoogleDriveService
                 'file_name' => $file->getClientOriginalName(),
                 'file_size' => $file->getSize(),
                 'parent_id' => $parentId,
-                'parent_id_type' => gettype($parentId),
-                'parent_id_empty' => empty($parentId),
                 'user_id' => $userId
             ]);
 
@@ -345,88 +542,149 @@ class GoogleDriveService
             $localParentId = null;
             
             if ($parentId) {
-                \Log::info('GoogleDriveService::uploadFile - Buscando pasta pai no banco', ['parent_id' => $parentId]);
-                
                 $parentFolder = GoogleDriveFile::find($parentId);
                 if ($parentFolder && !empty($parentFolder->file_id)) {
                     $googleDriveParentId = $parentFolder->file_id;
                     $localParentId = $parentFolder->id;
-                    \Log::info('GoogleDriveService::uploadFile - Pasta pai encontrada', [
-                        'local_id' => $parentFolder->id,
-                        'google_drive_id' => $parentFolder->file_id,
-                        'name' => $parentFolder->name
-                    ]);
-                } else {
-                    \Log::warning('GoogleDriveService::uploadFile - Pasta pai não encontrada no banco', ['parent_id' => $parentId]);
                 }
-            } else {
-                \Log::info('GoogleDriveService::uploadFile - Nenhuma pasta pai especificada, usando pasta raiz');
             }
-            
-            \Log::info('GoogleDriveService::uploadFile - Usando parent para upload', [
-                'parent_id' => $googleDriveParentId,
-                'local_parent_id' => $localParentId,
-                'root_folder_id' => $this->rootFolderId
-            ]);
 
-            \Log::info('GoogleDriveService::uploadFile - Preparando upload para Google Drive', [
-                'google_drive_parent_id' => $googleDriveParentId,
-                'root_folder_id' => $this->rootFolderId
-            ]);
+            // Determinar estratégia de upload baseada no tamanho do arquivo
+            $fileSize = $file->getSize();
+            $maxMultipartSize = 5 * 1024 * 1024; // 5 MB
+            $useResumableUpload = $fileSize > $maxMultipartSize;
 
-            // Tentar upload no Google Drive primeiro
+            // Preparar metadados do arquivo
+            $originalName = $file->getClientOriginalName();
+            $mimeType = $file->getMimeType();
+
+            // Verificar conversão apenas para arquivos que realmente precisam
+            if ($fileSize < 1024 * 1024) { // Arquivos menores que 1MB
+                $conversionMimeType = $this->getConversionMimeType($mimeType);
+                if ($conversionMimeType) {
+                    $mimeType = $conversionMimeType;
+                }
+            }
+
             $fileMetadata = new DriveFile([
-                'name' => $file->getClientOriginalName(),
+                'name' => $originalName,
                 'parents' => [$googleDriveParentId]
             ]);
 
-            $content = file_get_contents($file->getRealPath());
-            \Log::info('GoogleDriveService::uploadFile - Conteúdo do arquivo lido', [
-                'content_size' => strlen($content)
-            ]);
+            if ($mimeType !== $file->getMimeType()) {
+                $fileMetadata->setMimeType($mimeType);
+            }
 
-            $uploadedFile = $this->service->files->create($fileMetadata, [
+            // Adicionar texto indexável apenas para arquivos grandes ou tipos específicos
+            if ($fileSize > 1024 * 1024) { // Apenas para arquivos > 1MB
+                $indexableText = $this->getIndexableText($originalName, $mimeType);
+                if ($indexableText) {
+                    try {
+                        $contentHints = new \Google\Service\Drive\DriveFileContentHints();
+                        $contentHints->setIndexableText($indexableText);
+                        $fileMetadata->setContentHints($contentHints);
+                    } catch (\Exception $e) {
+                        // Continuar sem texto indexável
+                    }
+                }
+            }
+
+            // Ler conteúdo do arquivo
+            $content = file_get_contents($file->getRealPath());
+            if ($content === false) {
+                throw new \Exception('Falha ao ler o conteúdo do arquivo');
+            }
+
+            // Verificar se o serviço está inicializado
+            if (!$this->service) {
+                throw new \Exception('Serviço Google Drive não está inicializado');
+            }
+
+            // Preparar opções de upload otimizadas
+            $uploadOptions = [
                 'data' => $content,
                 'mimeType' => $file->getMimeType(),
-                'uploadType' => 'multipart',
-                'fields' => 'id, name, mimeType, webViewLink, webContentLink, thumbnailLink, size',
+                'uploadType' => $useResumableUpload ? 'resumable' : 'multipart',
+                'fields' => 'id, name, mimeType, webViewLink, webContentLink, thumbnailLink, size, createdTime, modifiedTime',
                 'supportsAllDrives' => true
-            ]);
+            ];
 
-            \Log::info('GoogleDriveService::uploadFile - Arquivo enviado para Google Drive', [
-                'google_drive_id' => $uploadedFile->getId(),
-                'name' => $uploadedFile->getName(),
-                'parents' => $uploadedFile->getParents()
+            if ($useResumableUpload) {
+                \Log::info('GoogleDriveService::uploadFile - Configurado para resumable upload');
+            }
+
+            // Criar e executar upload
+            $request = $this->service->files->create($fileMetadata, $uploadOptions);
+
+            // Executar o upload - corrigido para versão mais recente da API
+            try {
+                if ($uploadOptions['uploadType'] === 'multipart') {
+                    $uploadedFile = $request;
+                } else {
+                    if (method_exists($request, 'execute')) {
+                        $uploadedFile = $request->execute();
+                    } else {
+                        $uploadedFile = $request;
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning('GoogleDriveService::uploadFile - Erro ao executar upload, tentando fallback', [
+                    'error' => $e->getMessage(),
+                    'upload_type' => $uploadOptions['uploadType']
+                ]);
+                $uploadedFile = $request;
+            }
+
+            \Log::info('GoogleDriveService::uploadFile - Upload concluído com sucesso', [
+                'file_id' => $uploadedFile->getId(),
+                'file_name' => $uploadedFile->getName(),
+                'upload_type' => $useResumableUpload ? 'resumable' : 'multipart'
             ]);
 
             // Salvar no banco de dados
-            $dbFile = GoogleDriveFile::create([
-                'name' => $uploadedFile->getName(),
+            $dbFile = GoogleDriveFile::createOrUpdateFromGoogleDrive([
                 'file_id' => $uploadedFile->getId(),
+                'name' => $uploadedFile->getName(),
                 'mime_type' => $uploadedFile->getMimeType(),
                 'web_view_link' => $uploadedFile->getWebViewLink(),
                 'web_content_link' => $uploadedFile->getWebContentLink(),
                 'thumbnail_link' => $uploadedFile->getThumbnailLink(),
                 'size' => $uploadedFile->getSize(),
                 'parent_id' => $localParentId,
-                'created_by' => $userId
-            ]);
-
-            \Log::info('GoogleDriveService::uploadFile - Registro criado no banco', [
-                'db_id' => $dbFile->id,
-                'parent_id' => $dbFile->parent_id,
-                'google_drive_parent_id' => $googleDriveParentId
+                'created_by' => $userId,
+                'is_folder' => false,
+                'is_trashed' => false
             ]);
 
             return $dbFile;
 
-        } catch (\Exception $e) {
-            \Log::error('GoogleDriveService::uploadFile - Erro no upload para Google Drive', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+        } catch (\Google\Service\Exception $e) {
+            $errorCode = $e->getCode();
+            $errorMessage = $e->getMessage();
+
+            \Log::error('GoogleDriveService::uploadFile - Erro específico do Google Service', [
+                'error' => $errorMessage,
+                'code' => $errorCode,
+                'file_name' => $file->getClientOriginalName(),
+                'file_size' => $file->getSize()
             ]);
-            
-            // Não usar fallback local, deixar o erro propagar
+
+            // Tratar erros específicos
+            if ($errorCode === 404) {
+                throw new \Exception('Pasta de destino não encontrada no Google Drive.');
+            } elseif ($errorCode === 403) {
+                throw new \Exception('Permissões insuficientes para fazer upload na pasta especificada.');
+            } elseif ($errorCode === 401) {
+                throw new \Exception('Token de acesso expirado ou inválido. Renove as credenciais do Google Drive.');
+            } else {
+                throw new \Exception('Erro no serviço Google Drive: ' . $errorMessage);
+            }
+        } catch (\Exception $e) {
+            \Log::error('GoogleDriveService::uploadFile - Falha geral no upload', [
+                'error' => $e->getMessage(),
+                'file_name' => $file->getClientOriginalName(),
+                'file_size' => $file->getSize()
+            ]);
             throw $e;
         }
     }
@@ -464,14 +722,15 @@ class GoogleDriveService
                 }
             }
 
-            return GoogleDriveFile::create([
-                'name' => $folder->getName(),
+            return GoogleDriveFile::createOrUpdateFromGoogleDrive([
                 'file_id' => $folder->getId(),
+                'name' => $folder->getName(),
                 'mime_type' => $folder->getMimeType(),
                 'web_view_link' => $folder->getWebViewLink(),
                 'parent_id' => $localParentId,
                 'is_folder' => true,
-                'created_by' => $userId
+                'created_by' => $userId,
+                'is_trashed' => false
             ]);
         } catch (\Exception $e) {
             \Log::warning('Falha ao criar pasta no Google Drive: ' . $e->getMessage());
@@ -485,15 +744,16 @@ class GoogleDriveService
                 }
             }
             
-            return GoogleDriveFile::create([
-                'name' => $name,
+            return GoogleDriveFile::createOrUpdateFromGoogleDrive([
                 'file_id' => 'local_folder_' . uniqid(),
+                'name' => $name,
                 'mime_type' => 'application/vnd.google-apps.folder',
                 'web_view_link' => '#',
                 'parent_id' => $localParentId,
                 'is_folder' => true,
                 'created_by' => $userId,
-                'is_local' => true
+                'is_local' => true,
+                'is_trashed' => false
             ]);
         }
     }
@@ -782,15 +1042,15 @@ class GoogleDriveService
                         ]);
                         
                         if ($folderInfo) {
-                            $parentFolder = GoogleDriveFile::create([
-                                'file_id' => $newParentId,
-                                'name' => $folderInfo->getName(),
-                                'mime_type' => $folderInfo->getMimeType(),
-                                'is_folder' => true,
-                                'parent_id' => null, // Assumimos que é raiz se não sabemos
-                                'created_by' => auth()->id() ?? 1,
-                                'is_trashed' => false,
-                            ]);
+                                                    $parentFolder = GoogleDriveFile::createOrUpdateFromGoogleDrive([
+                            'file_id' => $newParentId,
+                            'name' => $folderInfo->getName(),
+                            'mime_type' => $folderInfo->getMimeType(),
+                            'is_folder' => true,
+                            'parent_id' => null, // Assumimos que é raiz se não sabemos
+                            'created_by' => auth()->id() ?? 1,
+                            'is_trashed' => false,
+                        ]);
                             
                             $parentId = $parentFolder->id;
                             \Log::info('GoogleDriveService::move - Pasta de destino criada no banco de dados', [
@@ -855,7 +1115,7 @@ class GoogleDriveService
                         }
                     } else {
                         // Criar novo registro
-                        GoogleDriveFile::create([
+                        GoogleDriveFile::createOrUpdateFromGoogleDrive([
                             'file_id' => $fileId,
                             'name' => $fileInfo->getName(),
                             'mime_type' => $fileInfo->getMimeType(),
@@ -1256,14 +1516,14 @@ class GoogleDriveService
             if ($this->isTestMode()) {
                 return 'test@example.com';
             }
-            
+
             // Obter informações do usuário atual
             $about = $this->service->about->get(['fields' => 'user']);
-            
+
             if ($about && $about->getUser()) {
                 return $about->getUser()->getEmailAddress();
             }
-            
+
             return null;
         } catch (\Exception $e) {
             \Log::error('GoogleDriveService::getCurrentUserEmail - Erro ao obter email do usuário', [
@@ -1271,5 +1531,152 @@ class GoogleDriveService
             ]);
             return null;
         }
+    }
+
+    /**
+     * Verificar se um MIME type pode ser convertido pelo Google Drive
+     * Baseado na documentação: verificar importFormats do recurso about
+     */
+    private function getConversionMimeType(string $mimeType): ?string
+    {
+        $conversionMap = [
+            // Documentos
+            'application/msword' => 'application/vnd.google-apps.document',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'application/vnd.google-apps.document',
+            'text/plain' => 'application/vnd.google-apps.document',
+            'text/html' => 'application/vnd.google-apps.document',
+            'application/rtf' => 'application/vnd.google-apps.document',
+            'application/vnd.oasis.opendocument.text' => 'application/vnd.google-apps.document',
+
+            // Planilhas
+            'application/vnd.ms-excel' => 'application/vnd.google-apps.spreadsheet',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'application/vnd.google-apps.spreadsheet',
+            'text/csv' => 'application/vnd.google-apps.spreadsheet',
+            'text/tab-separated-values' => 'application/vnd.google-apps.spreadsheet',
+            'application/vnd.oasis.opendocument.spreadsheet' => 'application/vnd.google-apps.spreadsheet',
+
+            // Apresentações
+            'application/vnd.ms-powerpoint' => 'application/vnd.google-apps.presentation',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'application/vnd.google-apps.presentation',
+            'application/vnd.oasis.opendocument.presentation' => 'application/vnd.google-apps.presentation',
+
+            // Imagens (convertidas para Docs com OCR)
+            'image/jpeg' => 'application/vnd.google-apps.document',
+            'image/png' => 'application/vnd.google-apps.document',
+            'image/gif' => 'application/vnd.google-apps.document',
+            'image/bmp' => 'application/vnd.google-apps.document',
+            'application/pdf' => 'application/vnd.google-apps.document',
+        ];
+
+        return $conversionMap[$mimeType] ?? null;
+    }
+
+    /**
+     * Definir texto indexável para tipos de arquivo desconhecidos
+     * Conforme documentação: contentHints.indexableText
+     */
+    private function getIndexableText(string $fileName, string $mimeType): ?string
+    {
+        // Tipos MIME que o Google Drive já indexa automaticamente
+        $autoIndexedTypes = [
+            'text/plain',
+            'text/html',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/bmp',
+            'application/json',
+            'text/csv',
+            'text/xml'
+        ];
+
+        // Se o tipo já é indexado automaticamente, não adicionar texto extra
+        if (in_array($mimeType, $autoIndexedTypes)) {
+            return null;
+        }
+
+        // Para tipos não reconhecidos, criar texto indexável baseado no nome do arquivo
+        $fileNameWithoutExtension = pathinfo($fileName, PATHINFO_FILENAME);
+        $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+        // Mapear extensões para descrições legíveis
+        $extensionDescriptions = [
+            'zip' => 'arquivo compactado',
+            'rar' => 'arquivo compactado',
+            '7z' => 'arquivo compactado',
+            'tar' => 'arquivo compactado',
+            'gz' => 'arquivo compactado',
+            'bz2' => 'arquivo compactado',
+
+            'mp4' => 'vídeo MP4',
+            'avi' => 'vídeo AVI',
+            'mkv' => 'vídeo MKV',
+            'mov' => 'vídeo MOV',
+            'wmv' => 'vídeo WMV',
+            'flv' => 'vídeo FLV',
+
+            'mp3' => 'áudio MP3',
+            'wav' => 'áudio WAV',
+            'flac' => 'áudio FLAC',
+            'aac' => 'áudio AAC',
+            'ogg' => 'áudio OGG',
+
+            'exe' => 'aplicativo executável',
+            'msi' => 'instalador Windows',
+            'dmg' => 'imagem disco macOS',
+            'iso' => 'imagem disco',
+            'bin' => 'arquivo binário',
+
+            'sql' => 'script banco de dados',
+            'db' => 'arquivo banco de dados',
+            'sqlite' => 'banco de dados SQLite',
+
+            'psd' => 'arquivo Photoshop',
+            'ai' => 'arquivo Illustrator',
+            'xd' => 'arquivo Adobe XD',
+            'fig' => 'arquivo Figma',
+
+            'dwg' => 'desenho CAD',
+            'dxf' => 'desenho CAD DXF',
+
+            'ttf' => 'fonte TrueType',
+            'otf' => 'fonte OpenType',
+            'woff' => 'fonte web',
+
+            'log' => 'arquivo de log',
+            'txt' => 'arquivo de texto',
+            'md' => 'arquivo Markdown',
+            'yml' => 'arquivo YAML',
+            'yaml' => 'arquivo YAML',
+            'json' => 'arquivo JSON',
+            'xml' => 'arquivo XML',
+            'css' => 'folha de estilo CSS',
+            'js' => 'script JavaScript',
+            'php' => 'script PHP',
+            'py' => 'script Python',
+            'java' => 'arquivo Java',
+            'cpp' => 'arquivo C++',
+            'c' => 'arquivo C',
+            'h' => 'arquivo header',
+        ];
+
+        $description = $extensionDescriptions[$extension] ?? 'arquivo ' . strtoupper($extension);
+
+        // Criar texto indexável
+        $indexableText = $fileNameWithoutExtension . ' ' . $description . ' ' . $fileName;
+
+        // Limitar tamanho (Google recomenda menos de 200 caracteres)
+        if (strlen($indexableText) > 200) {
+            $indexableText = substr($indexableText, 0, 197) . '...';
+        }
+
+        return $indexableText;
     }
 }

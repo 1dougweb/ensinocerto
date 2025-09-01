@@ -394,8 +394,8 @@ class GoogleDriveFileController extends Controller
                     $fileInfo = $this->driveService->getFileInfo($id);
                     
                     if ($fileInfo) {
-                        // Criar um registro local para o arquivo
-                        $file = GoogleDriveFile::create([
+                        // Criar ou atualizar um registro local para o arquivo (evitando duplicatas)
+                        $file = GoogleDriveFile::createOrUpdateFromGoogleDrive([
                             'file_id' => $id,
                             'name' => $fileInfo->getName(),
                             'mime_type' => $fileInfo->getMimeType() ?? null,
@@ -911,8 +911,8 @@ class GoogleDriveFileController extends Controller
                                         ]);
                                     }
                                 } else {
-                                    // Criar novo registro no banco de dados
-                                    $targetFolder = GoogleDriveFile::create([
+                                    // Criar novo registro no banco de dados (evitando duplicatas)
+                                    $targetFolder = GoogleDriveFile::createOrUpdateFromGoogleDrive([
                                         'file_id' => $folderInfo->getId(),
                                         'name' => $folderInfo->getName(),
                                         'mime_type' => $folderInfo->getMimeType(),
@@ -1147,8 +1147,8 @@ class GoogleDriveFileController extends Controller
                     'mimeType' => $fileInfo->getMimeType()
                 ]);
                 
-                // Cria um registro local para o arquivo
-                $file = GoogleDriveFile::create([
+                // Cria ou atualiza um registro local para o arquivo (evitando duplicatas)
+                $file = GoogleDriveFile::createOrUpdateFromGoogleDrive([
                     'file_id' => $fileId,
                     'name' => $fileInfo->getName(),
                     'mime_type' => $fileInfo->getMimeType() ?? null,
@@ -1208,8 +1208,8 @@ class GoogleDriveFileController extends Controller
                     return back()->with('error', 'Arquivo não encontrado no Google Drive');
                 }
                 
-                // Criar registro local
-                $file = GoogleDriveFile::create([
+                // Criar ou atualizar registro local (evitando duplicatas)
+                $file = GoogleDriveFile::createOrUpdateFromGoogleDrive([
                     'file_id' => $fileId,
                     'name' => $fileInfo->getName(),
                     'mime_type' => $fileInfo->getMimeType() ?? null,

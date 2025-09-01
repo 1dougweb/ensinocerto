@@ -78,16 +78,29 @@ class GoogleDriveFileController extends Controller
         ]);
 
         try {
-            $file = $this->driveService->uploadFile(
-                $request->file('file'),
-                Auth::id(),
-                $request->folder_id
-            );
+            $uploadedFile = $request->file('file');
+            $fileSize = $uploadedFile->getSize();
+            
+            // Usar upload rápido para arquivos pequenos (< 5MB)
+            if ($fileSize <= 5 * 1024 * 1024) {
+                $file = $this->driveService->uploadSmallFile(
+                    $uploadedFile,
+                    Auth::id(),
+                    $request->folder_id
+                );
+            } else {
+                $file = $this->driveService->uploadFile(
+                    $uploadedFile,
+                    Auth::id(),
+                    $request->folder_id
+                );
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Arquivo enviado com sucesso!',
-                'file' => $file
+                'file' => $file,
+                'upload_method' => $fileSize <= 5 * 1024 * 1024 ? 'fast' : 'standard'
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -143,8 +156,8 @@ class GoogleDriveFileController extends Controller
                     $fileInfo = $this->driveService->getFileInfo($id);
                     
                     if ($fileInfo) {
-                        // Criar um registro local para o arquivo
-                        $file = GoogleDriveFile::create([
+                        // Criar ou atualizar um registro local para o arquivo (evitando duplicatas)
+                        $file = GoogleDriveFile::createOrUpdateFromGoogleDrive([
                             'file_id' => $id,
                             'name' => $fileInfo['name'],
                             'mime_type' => $fileInfo['mimeType'] ?? null,
@@ -347,8 +360,8 @@ class GoogleDriveFileController extends Controller
                 $fileInfo = $this->driveService->getFileInfo($fileId);
                 
                 if ($fileInfo) {
-                    // Cria um registro local para o arquivo
-                    $file = GoogleDriveFile::create([
+                    // Cria ou atualiza um registro local para o arquivo (evitando duplicatas)
+                    $file = GoogleDriveFile::createOrUpdateFromGoogleDrive([
                         'file_id' => $fileId,
                         'name' => $fileInfo['name'],
                         'mime_type' => $fileInfo['mimeType'] ?? null,
@@ -388,8 +401,8 @@ class GoogleDriveFileController extends Controller
                 $fileInfo = $this->driveService->getFileInfo($fileId);
                 
                 if ($fileInfo) {
-                    // Cria um registro local para o arquivo
-                    $file = GoogleDriveFile::create([
+                    // Cria ou atualiza um registro local para o arquivo (evitando duplicatas)
+                    $file = GoogleDriveFile::createOrUpdateFromGoogleDrive([
                         'file_id' => $fileId,
                         'name' => $fileInfo['name'],
                         'mime_type' => $fileInfo['mimeType'] ?? null,
